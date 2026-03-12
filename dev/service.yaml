@@ -1,0 +1,13 @@
+# k8s/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-app
+  namespace: myapp
+spec:
+  selector:
+    app: nginx-app
+  ports:
+    - port: 80
+      targetPort: 80
+  type: ClusterIP
