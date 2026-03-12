@@ -8,7 +8,7 @@ spec:
 
   source:
     repoURL: https://github.com/marcolo-30/k8s-gitops-lab.git
-    targetRevision: HEAD
+    targetRevision: main
     path: dev
 
   destination:
