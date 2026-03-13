@@ -7,7 +7,7 @@ from opentelemetry import metrics
 from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 from opentelemetry.metrics import CallbackOptions, Observation
 from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader, MetricExporter, MetricExportResult
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader, MetricExportResult
 from opentelemetry.sdk.resources import Resource
 
 SERVICE_NAME  = os.getenv("SERVICE_NAME", "main-app")
@@ -19,42 +19,29 @@ OTEL_ENDPOINT = os.getenv(
 print(f"[INFO]  [startup] Initializing OpenTelemetry — service={SERVICE_NAME}")
 print(f"[INFO]  [startup] OTEL endpoint: {OTEL_ENDPOINT}")
 
-# --- Wrapper exporter that logs every push attempt ---
-class LoggingExporter(MetricExporter):
-    def __init__(self, inner):
-        self._inner = inner
+# --- Inner OTLP exporter ---
+inner_exporter = OTLPMetricExporter(endpoint=f"{OTEL_ENDPOINT}/v1/metrics")
 
-    @property
-    def preferred_temporality(self):
-        return self._inner.preferred_temporality
+# --- Wrap export() to log success/failure without changing the class structure ---
+_original_export = inner_exporter.export
 
-    @property
-    def preferred_aggregation(self):
-        return self._inner.preferred_aggregation
+def _logged_export(metrics_data, timeout_millis=10000, **kwargs):
+    try:
+        result = _original_export(metrics_data, timeout_millis=timeout_millis, **kwargs)
+        if result == MetricExportResult.SUCCESS:
+            print(f"[INFO]  [otel-export] Push SUCCESS -> {OTEL_ENDPOINT}/v1/metrics")
+        else:
+            print(f"[ERROR] [otel-export] Push FAILED (non-success result) -> {OTEL_ENDPOINT}/v1/metrics")
+        return result
+    except Exception as e:
+        print(f"[ERROR] [otel-export] Push EXCEPTION -> {OTEL_ENDPOINT}/v1/metrics | {e}")
+        return MetricExportResult.FAILURE
 
-    def export(self, metrics_data, timeout_millis=10000, **kwargs):
-        try:
-            result = self._inner.export(metrics_data, timeout_millis=timeout_millis, **kwargs)
-            if result == MetricExportResult.SUCCESS:
-                print(f"[INFO]  [otel-export] ✅ Push SUCCESS → {OTEL_ENDPOINT}/v1/metrics")
-            else:
-                print(f"[ERROR] [otel-export] ❌ Push FAILED (non-success result) → {OTEL_ENDPOINT}/v1/metrics")
-            return result
-        except Exception as e:
-            print(f"[ERROR] [otel-export] ❌ Push EXCEPTION → {OTEL_ENDPOINT}/v1/metrics — {e}")
-            return MetricExportResult.FAILURE
-
-    def shutdown(self, timeout_millis=30000, **kwargs):
-        return self._inner.shutdown(timeout_millis=timeout_millis, **kwargs)
-
-    def force_flush(self, timeout_millis=10000):
-        return self._inner.force_flush(timeout_millis=timeout_millis)
+inner_exporter.export = _logged_export
 
 # --- OpenTelemetry setup ---
 resource       = Resource(attributes={"service.name": SERVICE_NAME})
-inner_exporter = OTLPMetricExporter(endpoint=f"{OTEL_ENDPOINT}/v1/metrics")
-exporter       = LoggingExporter(inner_exporter)
-reader         = PeriodicExportingMetricReader(exporter, export_interval_millis=2000)
+reader         = PeriodicExportingMetricReader(inner_exporter, export_interval_millis=2000)
 meter_provider = MeterProvider(resource=resource, metric_readers=[reader])
 metrics.set_meter_provider(meter_provider)
 meter = metrics.get_meter("main-app.meter")
@@ -73,14 +60,11 @@ meter.create_observable_gauge(
 )
 print("[INFO]  [startup] Metric registered: main_app.cpu_percent")
 
-# --- CPU thresholds for log levels ---
+# --- CPU thresholds ---
 def cpu_level(cpu):
-    if cpu < 30:
-        return "INFO "
-    elif cpu < 70:
-        return "WARN "
-    else:
-        return "ERROR"
+    if cpu < 30:   return "INFO "
+    elif cpu < 70: return "WARN "
+    else:          return "ERROR"
 
 _prev_level = None
 
@@ -88,16 +72,12 @@ def track_cpu():
     global _current_cpu, _prev_level
     process = psutil.Process()
     iteration = 0
-
     print("[INFO]  [cpu-tracker] Starting CPU sampling loop")
-
     while True:
         _current_cpu = process.cpu_percent(interval=1)
         level = cpu_level(_current_cpu)
         iteration += 1
-
         print(f"[{level}] [cpu-tracker] cpu={_current_cpu:.1f}% iteration={iteration}")
-
         if _prev_level != level:
             if level == "WARN ":
                 print(f"[WARN ] [cpu-tracker] CPU crossed 30% threshold — possible external pressure")
@@ -106,18 +86,15 @@ def track_cpu():
             elif level == "INFO " and _prev_level is not None:
                 print(f"[INFO ] [cpu-tracker] CPU back to normal levels — pressure relieved")
             _prev_level = level
-
         if iteration % 30 == 0:
             print(f"[INFO]  [cpu-tracker] ---- 30s summary: avg_cpu={_current_cpu:.1f}% total_iterations={iteration} ----")
 
 if __name__ == "__main__":
     print(f"[INFO]  [main] Pod starting up — service={SERVICE_NAME}")
     print(f"[INFO]  [main] psutil version: {psutil.__version__}")
-
     threading.Thread(target=track_cpu, daemon=True).start()
     print("[INFO]  [main] CPU tracker thread started")
     print("[INFO]  [main] Ready — pushing metrics to OTEL every 2s")
     print("[INFO]  [main] To stress test run: kubectl apply -f burner/cpu-burner-job.yaml")
-
     while True:
         time.sleep(5)
