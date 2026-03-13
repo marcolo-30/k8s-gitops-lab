@@ -21,6 +21,15 @@ jobs:
         with:
           token: ${{ secrets.GH_PAT }}
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        # QEMU emulates ARM on the GitHub Actions runner (which is AMD64)
+        # This is what allows building for multiple architectures
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        # Buildx is the Docker plugin that enables multi-platform builds
+
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -28,11 +37,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
+      - name: Build and push (amd64 + arm64)
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
+          # Builds for both Intel/AMD machines and ARM devices (Pi, Apple Silicon, etc.)
+          platforms: linux/amd64,linux/arm64
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
