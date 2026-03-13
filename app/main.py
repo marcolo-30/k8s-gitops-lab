@@ -1,4 +1,7 @@
 # app/main.py
+# Runs a continuous CPU work loop and measures iterations/second
+# When the burner pod steals CPU, iterations/sec drops visibly in Grafana
+
 import os
 import time
 import threading
@@ -16,13 +19,10 @@ OTEL_ENDPOINT = os.getenv(
     "http://otel-collector.observability.svc.cluster.local:4318"
 )
 
-print(f"[INFO]  [startup] Initializing OpenTelemetry — service={SERVICE_NAME}")
-print(f"[INFO]  [startup] OTEL endpoint: {OTEL_ENDPOINT}")
+print(f"[INFO]  [startup] service={SERVICE_NAME} endpoint={OTEL_ENDPOINT}")
 
-# --- Inner OTLP exporter ---
+# --- OTEL setup ---
 inner_exporter = OTLPMetricExporter(endpoint=f"{OTEL_ENDPOINT}/v1/metrics")
-
-# --- Wrap export() to log success/failure without changing the class structure ---
 _original_export = inner_exporter.export
 
 def _logged_export(metrics_data, timeout_millis=10000, **kwargs):
@@ -31,70 +31,93 @@ def _logged_export(metrics_data, timeout_millis=10000, **kwargs):
         if result == MetricExportResult.SUCCESS:
             print(f"[INFO]  [otel-export] Push SUCCESS -> {OTEL_ENDPOINT}/v1/metrics")
         else:
-            print(f"[ERROR] [otel-export] Push FAILED (non-success result) -> {OTEL_ENDPOINT}/v1/metrics")
+            print(f"[ERROR] [otel-export] Push FAILED -> {OTEL_ENDPOINT}/v1/metrics")
         return result
     except Exception as e:
-        print(f"[ERROR] [otel-export] Push EXCEPTION -> {OTEL_ENDPOINT}/v1/metrics | {e}")
+        print(f"[ERROR] [otel-export] Push EXCEPTION -> {e}")
         return MetricExportResult.FAILURE
 
 inner_exporter.export = _logged_export
 
-# --- OpenTelemetry setup ---
 resource       = Resource(attributes={"service.name": SERVICE_NAME})
 reader         = PeriodicExportingMetricReader(inner_exporter, export_interval_millis=2000)
 meter_provider = MeterProvider(resource=resource, metric_readers=[reader])
 metrics.set_meter_provider(meter_provider)
 meter = metrics.get_meter("main-app.meter")
-print("[INFO]  [startup] OpenTelemetry initialized — exporting every 2s")
 
-# --- Metric ---
-_current_cpu = 0.0
+# --- Metrics ---
+_current_cpu  = 0.0
+_iterations_per_sec = 0.0
 
 def get_cpu(options: CallbackOptions):
     yield Observation(_current_cpu, {"service": SERVICE_NAME})
 
+def get_iterations(options: CallbackOptions):
+    yield Observation(_iterations_per_sec, {"service": SERVICE_NAME})
+
 meter.create_observable_gauge(
     "main_app.cpu_percent",
     callbacks=[get_cpu],
-    description="CPU percent of this pod. Watch it change when the burner pod runs."
+    description="CPU usage percent of this pod."
 )
-print("[INFO]  [startup] Metric registered: main_app.cpu_percent")
+meter.create_observable_gauge(
+    "main_app.iterations_per_sec",
+    callbacks=[get_iterations],
+    description="Work iterations per second — drops when CPU is stolen by another pod."
+)
+print("[INFO]  [startup] Metrics registered: main_app.cpu_percent, main_app.iterations_per_sec")
 
-# --- CPU thresholds ---
-def cpu_level(cpu):
-    if cpu < 30:   return "INFO "
-    elif cpu < 70: return "WARN "
-    else:          return "ERROR"
-
-_prev_level = None
-
+# --- CPU sampler ---
 def track_cpu():
-    global _current_cpu, _prev_level
+    global _current_cpu
     process = psutil.Process()
-    iteration = 0
-    print("[INFO]  [cpu-tracker] Starting CPU sampling loop")
     while True:
         _current_cpu = process.cpu_percent(interval=1)
-        level = cpu_level(_current_cpu)
-        iteration += 1
-        print(f"[{level}] [cpu-tracker] cpu={_current_cpu:.1f}% iteration={iteration}")
-        if _prev_level != level:
-            if level == "WARN ":
-                print(f"[WARN ] [cpu-tracker] CPU crossed 30% threshold — possible external pressure")
-            elif level == "ERROR":
-                print(f"[ERROR] [cpu-tracker] CPU crossed 70% threshold — node under heavy load!")
-            elif level == "INFO " and _prev_level is not None:
-                print(f"[INFO ] [cpu-tracker] CPU back to normal levels — pressure relieved")
-            _prev_level = level
-        if iteration % 30 == 0:
-            print(f"[INFO]  [cpu-tracker] ---- 30s summary: avg_cpu={_current_cpu:.1f}% total_iterations={iteration} ----")
+
+threading.Thread(target=track_cpu, daemon=True).start()
+
+# --- Work loop — runs on main thread, competes for CPU ---
+def work_loop():
+    global _iterations_per_sec
+    iteration  = 0
+    window_start = time.time()
+    window_iters = 0
+
+    print("[INFO]  [work-loop] Starting — this loop competes for CPU with the burner pod")
+
+    while True:
+        # Real CPU work — math loop
+        _ = sum(i * i for i in range(5_000))
+        iteration  += 1
+        window_iters += 1
+
+        # Every second, calculate iterations/sec and log it
+        elapsed = time.time() - window_start
+        if elapsed >= 1.0:
+            _iterations_per_sec = window_iters / elapsed
+            cpu = _current_cpu
+
+            # Log level based on CPU pressure
+            if cpu < 30:
+                level = "INFO "
+            elif cpu < 70:
+                level = "WARN "
+            else:
+                level = "ERROR"
+
+            print(f"[{level}] [work-loop] iter/s={_iterations_per_sec:.0f} cpu={cpu:.1f}% total={iteration}")
+
+            if cpu > 70:
+                print(f"[ERROR] [work-loop] CPU above 70% — burner is stealing resources!")
+            elif cpu > 30:
+                print(f"[WARN ] [work-loop] CPU above 30% — starting to feel pressure")
+
+            window_start = time.time()
+            window_iters = 0
 
 if __name__ == "__main__":
-    print(f"[INFO]  [main] Pod starting up — service={SERVICE_NAME}")
-    print(f"[INFO]  [main] psutil version: {psutil.__version__}")
-    threading.Thread(target=track_cpu, daemon=True).start()
-    print("[INFO]  [main] CPU tracker thread started")
-    print("[INFO]  [main] Ready — pushing metrics to OTEL every 2s")
-    print("[INFO]  [main] To stress test run: kubectl apply -f burner/cpu-burner-job.yaml")
-    while True:
-        time.sleep(5)
+    print(f"[INFO]  [main] Pod starting — service={SERVICE_NAME}")
+    print(f"[INFO]  [main] psutil={psutil.__version__}")
+    print("[INFO]  [main] Watch main_app_iterations_per_sec in Grafana — it drops under CPU pressure")
+    print("[INFO]  [main] To stress: kubectl run cpu-burner --image=python:3.12-slim -n myapp -- python3 -c '...'")
+    work_loop()  # runs forever on main thread
