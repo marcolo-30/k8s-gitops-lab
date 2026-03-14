@@ -1,9 +1,11 @@
 # app/main.py
-# Runs a continuous CPU work loop and measures iterations/second
-# When the burner pod steals CPU, iterations/sec drops visibly in Grafana
+# Heavier work loop — sensitive to CPU throttling
+# Removes CPU limit so pod competes freely for node CPU
+# When burner runs: iterations_per_sec drops 40-60% visibly in Grafana
 
 import os
 import time
+import math
 import threading
 import psutil
 from opentelemetry import metrics
@@ -46,14 +48,18 @@ metrics.set_meter_provider(meter_provider)
 meter = metrics.get_meter("main-app.meter")
 
 # --- Metrics ---
-_current_cpu  = 0.0
+_current_cpu        = 0.0
 _iterations_per_sec = 0.0
+_task_duration_ms   = 0.0   # how long each work unit takes — rises under pressure
 
 def get_cpu(options: CallbackOptions):
     yield Observation(_current_cpu, {"service": SERVICE_NAME})
 
 def get_iterations(options: CallbackOptions):
     yield Observation(_iterations_per_sec, {"service": SERVICE_NAME})
+
+def get_task_duration(options: CallbackOptions):
+    yield Observation(_task_duration_ms, {"service": SERVICE_NAME})
 
 meter.create_observable_gauge(
     "main_app.cpu_percent",
@@ -63,9 +69,14 @@ meter.create_observable_gauge(
 meter.create_observable_gauge(
     "main_app.iterations_per_sec",
     callbacks=[get_iterations],
-    description="Work iterations per second — drops when CPU is stolen by another pod."
+    description="Work iterations per second — drops under CPU pressure."
 )
-print("[INFO]  [startup] Metrics registered: main_app.cpu_percent, main_app.iterations_per_sec")
+meter.create_observable_gauge(
+    "main_app.task_duration_ms",
+    callbacks=[get_task_duration],
+    description="Time in ms to complete one work unit — rises under CPU pressure."
+)
+print("[INFO]  [startup] Metrics registered: cpu_percent, iterations_per_sec, task_duration_ms")
 
 # --- CPU sampler ---
 def track_cpu():
@@ -76,28 +87,33 @@ def track_cpu():
 
 threading.Thread(target=track_cpu, daemon=True).start()
 
-# --- Work loop — runs on main thread, competes for CPU ---
+# --- Heavy work loop ---
+# Uses sqrt + log so the CPU actually has to work for each iteration
+# Each unit takes ~2-5ms — long enough that throttling delays completion visibly
 def work_loop():
-    global _iterations_per_sec
-    iteration  = 0
+    global _iterations_per_sec, _task_duration_ms
+    iteration    = 0
     window_start = time.time()
     window_iters = 0
 
-    print("[INFO]  [work-loop] Starting — this loop competes for CPU with the burner pod")
+    print("[INFO]  [work-loop] Starting heavy work loop")
+    print("[INFO]  [work-loop] Each iteration: sum(sqrt(i) * log(i+1)) for 50,000 elements")
 
     while True:
-        # Real CPU work — math loop
-        _ = sum(i * i for i in range(5_000))
-        iteration  += 1
-        window_iters += 1
+        # Heavy math — 10x more work than before
+        t0 = time.time()
+        _ = sum(math.sqrt(i) * math.log(i + 1) for i in range(50_000))
+        t1 = time.time()
 
-        # Every second, calculate iterations/sec and log it
+        iteration    += 1
+        window_iters += 1
+        _task_duration_ms = (t1 - t0) * 1000   # ms per work unit
+
         elapsed = time.time() - window_start
         if elapsed >= 1.0:
             _iterations_per_sec = window_iters / elapsed
             cpu = _current_cpu
 
-            # Log level based on CPU pressure
             if cpu < 30:
                 level = "INFO "
             elif cpu < 70:
@@ -105,7 +121,11 @@ def work_loop():
             else:
                 level = "ERROR"
 
-            print(f"[{level}] [work-loop] iter/s={_iterations_per_sec:.0f} cpu={cpu:.1f}% total={iteration}")
+            print(f"[{level}] [work-loop] "
+                  f"iter/s={_iterations_per_sec:.0f} "
+                  f"task_ms={_task_duration_ms:.1f} "
+                  f"cpu={cpu:.1f}% "
+                  f"total={iteration}")
 
             if cpu > 70:
                 print(f"[ERROR] [work-loop] CPU above 70% — burner is stealing resources!")
@@ -118,6 +138,7 @@ def work_loop():
 if __name__ == "__main__":
     print(f"[INFO]  [main] Pod starting — service={SERVICE_NAME}")
     print(f"[INFO]  [main] psutil={psutil.__version__}")
-    print("[INFO]  [main] Watch main_app_iterations_per_sec in Grafana — it drops under CPU pressure")
-    print("[INFO]  [main] To stress: kubectl run cpu-burner --image=python:3.12-slim -n myapp -- python3 -c '...'")
-    work_loop()  # runs forever on main thread
+    print("[INFO]  [main] No CPU limit — pod competes freely for node CPU")
+    print("[INFO]  [main] Watch main_app_iterations_per_sec AND main_app_task_duration_ms")
+    print("[INFO]  [main] To stress: kubectl run cpu-wave --image=python:3.12-slim -n myapp ...")
+    work_loop()
