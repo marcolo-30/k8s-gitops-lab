@@ -1,6 +1,10 @@
-# k8s-gitops-lab
+<div align="center">
+  <img src="docs/images/github-actions.png" width="500"/>
+</div>
 
-A hands-on project to answer one question: *"How do I push code and see it running in Kubernetes without doing anything manually?"*
+> A hands-on project to answer one question: *"How do I push code and see it running in Kubernetes without doing anything manually?"*
+
+![CI](https://github.com/marcolo-30/k8s-gitops-lab/actions/workflows/ci.yml/badge.svg)
 
 ---
 
@@ -43,6 +47,8 @@ They communicate through the repository. One writes, the other reads.
 
 ## The Flow
 
+<img src="docs/images/argocd-synced.png" width="700"/>
+
 ```
 git push
     │
@@ -68,8 +74,6 @@ New pod running ✅
 
 The pipeline triggers only when `app/` or `Dockerfile` changes. This avoids unnecessary builds when editing documentation or Kubernetes manifests.
 
-![GitHub Actions pipeline runs](docs/images/github-actions.png)
-
 Each run takes about 90 seconds and produces a multi-platform image that works on both AMD64 and ARM devices. The commit back to the repo uses the `[skip ci]` tag to prevent the pipeline from triggering itself in a loop.
 
 The only secret needed is a Personal Access Token (`GH_PAT`) with `repo` scope so the pipeline can write back to the repository.
@@ -80,15 +84,15 @@ The only secret needed is a Personal Access Token (`GH_PAT`) with `repo` scope s
 
 ArgoCD runs as a set of pods inside the cluster. The `application.yaml` file tells it which repository and which folder to watch. Once connected, it reconciles the cluster state against the repository on every detected change.
 
-![ArgoCD showing Healthy and Synced status](docs/images/argocd-synced.png)
+<img src="docs/images/Argo.png" width="700"/>
 
-The screenshot shows the result after several deployments. The cluster is **Healthy** and **Synced** to the latest commit. The deployment history on the right shows every revision ArgoCD has applied — each one triggered automatically by a commit from the CI pipeline. Any of these revisions can be used to roll back with a single click.
+The cluster is **Healthy** and **Synced** to the latest commit. The deployment history on the right shows every revision ArgoCD has applied — each one triggered automatically by a commit from the CI pipeline. Any of these revisions can be used to roll back with a single click.
 
 One detail worth noting: the author on every sync is `github-actions[bot]`. ArgoCD is applying commits it did not create — it simply reacts to whatever lands in the repository.
 
 ---
 
-## What This Demonstrates
+## Key Concepts
 
 **Separation of concerns.** CI builds and publishes artifacts. CD deploys them. Neither tool needs credentials to the other's domain.
 
@@ -115,9 +119,19 @@ k8s-gitops-lab/
 
 ---
 
-## References
+## Built With
 
-The following resources were essential to understanding the concepts behind this setup:
+| Tool | Role |
+|---|---|
+| GitHub Actions | CI — build image, update manifest |
+| ArgoCD | CD — sync cluster to repo state |
+| GHCR | Container registry |
+| k3s | Kubernetes distribution |
+| Docker | Container runtime |
+
+---
+
+## References
 
 - **[ArgoCD Tutorial for Beginners | GitOps CD for Kubernetes](https://www.youtube.com/watch?v=MeU5_k9ssrs)** — TechWorld with Nana. Clear explanation of the GitOps philosophy and how ArgoCD implements it. Helped understand why the repository should be the source of truth rather than running `kubectl` commands directly.
 
