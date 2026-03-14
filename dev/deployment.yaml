@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: main-app
-          image: ghcr.io/marcolo-30/k8s-gitops-lab:072f8a7338f57c6ea7e33405d89d93b7db585f3e
+          image: ghcr.io/marcolo-30/k8s-gitops-lab:d92349a90fd75bfb0822fa5943288b7302094ac9
           imagePullPolicy: Always
           env:
             - name: SERVICE_NAME
