@@ -27,5 +27,5 @@ spec:
               cpu: "100m"
               memory: "64Mi"
             limits:
-              cpu: "200m"      # ← esto es lo nuevo
+              cpu: "100m"      # ← esto es lo nuevo
               memory: "128Mi"  # ← esto también
