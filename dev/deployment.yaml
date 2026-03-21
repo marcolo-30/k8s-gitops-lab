@@ -13,9 +13,11 @@ spec:
       labels:
         app: main-app
     spec:
+      nodeSelector:
+        kubernetes.io/hostname: vm1node
       containers:
         - name: main-app
-          image: ghcr.io/marcolo-30/k8s-gitops-lab:5e3ac95727bed6955a8f0765937ece123948e4e6
+          image: ghcr.io/marcolo-30/k8s-gitops-lab:d92349a90fd75bfb0822fa5943288b7302094ac9
           imagePullPolicy: Always
           env:
             - name: SERVICE_NAME
@@ -26,6 +28,3 @@ spec:
             requests:
               cpu: "100m"
               memory: "64Mi"
-            limits:
-              cpu: "100m"      # ← esto es lo nuevo
-              memory: "128Mi"  # ← esto también
