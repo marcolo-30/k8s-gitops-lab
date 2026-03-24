@@ -26,12 +26,13 @@ spec:
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://10.43.138.250:4318"
             - name: WORKLOAD_SIZE
-              # 50000 is good for a fast VM. 5000 is better for a Raspberry Pi.
-              # Tune this value until you see a baseline CPU usage below 100%.
-              value: "5000"
+              # A high value to keep the workers busy.
+              # Adjust if the CPU doesn't hit 100%.
+              value: "200000"
           resources:
             # This pod is 'Burstable'. It is guaranteed 100m of CPU.
             requests:
               cpu: "100m"
-              memory: "64Mi"
-            # By NOT setting a CPU limit, it can be throttled by other pods.
+              memory: "128Mi" # Increased memory for multiple processes
+            # By NOT setting a CPU limit, it can use all available cores
+            # and be throttled by other high-priority pods.
