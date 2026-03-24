@@ -13,28 +13,16 @@ spec:
       labels:
         app: main-app
     spec:
-      nodeSelector:
-        kubernetes.io/hostname: r3-node
       containers:
         - name: main-app
-          image: ghcr.io/marcolo-30/k8s-gitops-lab:a8dcb61393b19531c57286ae649909501a57e045
+          image: ghcr.io/marcolo-30/k8s-gitops-lab:072f8a7338f57c6ea7e33405d89d93b7db585f3e
           imagePullPolicy: Always
           env:
             - name: SERVICE_NAME
               value: "main-app"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://10.43.138.250:4318"
-            - name: NODE_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: spec.nodeName
-            - name: NODE_COST
-              value: "1.0"        # RPi = cheap. Change to "2.5" when on vm1node
-            - name: SLEEP_BETWEEN_ITERATIONS
-              value: "0.05"       # 50ms rest → ~30-40% CPU baseline
           resources:
             requests:
               cpu: "100m"
               memory: "64Mi"
-            # No CPU limit intentionally — pod competes freely
-            # so burner impact is visible in metrics
