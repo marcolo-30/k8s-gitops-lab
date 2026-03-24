@@ -18,7 +18,7 @@ spec:
       containers:
         - name: main-app
           # IMPORTANT: You will need to build and push a new image with the updated main.py
-          image: ghcr.io/marcolo-30/k8s-gitops-lab:bd00c78c5849069582305f169c1432aa3933bb81
+          image: ghcr.io/marcolo-30/k8s-gitops-lab:d9179f6d05048ed7e650790c5d8b13d92f2b8868
           imagePullPolicy: Always
           env:
             - name: SERVICE_NAME
