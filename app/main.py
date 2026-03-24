@@ -1,5 +1,5 @@
 # app/main.py
-# Goal: A multi-process app that saturates all available CPU cores.
+# Goal: A multi-process app that allows configuring CPU core usage.
 
 import os
 import time
@@ -11,7 +11,6 @@ from opentelemetry import metrics
 from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 from opentelemetry.metrics import CallbackOptions, Observation
 from opentelemetry.sdk.metrics import MeterProvider
-# This was the missing import
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
 
@@ -19,8 +18,8 @@ from opentelemetry.sdk.resources import Resource
 SERVICE_NAME = os.getenv("SERVICE_NAME", "main-app")
 OTEL_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel-collector.observability.svc.cluster.local:4318")
 WORKLOAD_SIZE = int(os.getenv("WORKLOAD_SIZE", "200000"))
-# Use all available CPU cores
-NUM_WORKERS = multiprocessing.cpu_count()
+# Allow configuring the number of workers. Defaults to all cores if not set.
+NUM_WORKERS = int(os.getenv("NUM_WORKERS", multiprocessing.cpu_count()))
 
 print(f"[INFO]  [startup] service={SERVICE_NAME}, workers={NUM_WORKERS}, workload_size={WORKLOAD_SIZE}")
 
@@ -33,7 +32,6 @@ meter = metrics.get_meter("main-app.meter")
 
 # --- Metrics State & Callbacks ---
 _current_cpu = 0.0
-# These metrics are less meaningful now, but we keep them for consistency.
 _iterations_per_sec = 0.0
 _task_duration_ms = 0.0
 
@@ -53,7 +51,6 @@ meter.create_observable_gauge("main_app.task_duration_ms", callbacks=[get_task_d
 print("[INFO]  [startup] Metrics registered.")
 
 # --- CPU Sampler Thread ---
-# psutil correctly measures the CPU of the main process AND all its children.
 def track_cpu():
     global _current_cpu
     process = psutil.Process()
@@ -63,23 +60,25 @@ def track_cpu():
 threading.Thread(target=track_cpu, daemon=True).start()
 
 # --- Worker Function ---
-# This function will be run by each worker process to burn CPU.
 def burn_cpu(_):
     while True:
         _ = sum(math.sqrt(i) * math.log(i + 1) for i in range(WORKLOAD_SIZE))
 
 # --- Main Execution Block ---
 if __name__ == "__main__":
-    print(f"[INFO]  [main] Starting {NUM_WORKERS} worker processes to saturate CPU.")
+    # Ensure we don't try to use more workers than available cores
+    if NUM_WORKERS > multiprocessing.cpu_count():
+        print(f"[WARN]  [main] NUM_WORKERS ({NUM_WORKERS}) is greater than available cores ({multiprocessing.cpu_count()}). Capping to max available.")
+        NUM_WORKERS = multiprocessing.cpu_count()
+
+    print(f"[INFO]  [main] Starting {NUM_WORKERS} worker processes.")
     
-    # Create and start the pool of worker processes
     pool = multiprocessing.Pool(processes=NUM_WORKERS)
     pool.map_async(burn_cpu, range(NUM_WORKERS))
 
-    # The main process now just reports metrics and keeps the pod alive.
     window_start, window_iters = time.time(), 0
     while True:
-        time.sleep(1.0) # The main process can sleep, the workers cannot.
+        time.sleep(1.0)
         window_iters += 1
         
         elapsed = time.time() - window_start

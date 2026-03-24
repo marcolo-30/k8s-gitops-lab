@@ -18,7 +18,11 @@ spec:
       containers:
         - name: main-app
           # IMPORTANT: You will need to build and push a new image with the updated main.py
+<<<<<<< Updated upstream
           image: ghcr.io/marcolo-30/k8s-gitops-lab:1f47f3eb2ae577e11de92d75466e2925f02094a5
+=======
+          image: ghcr.io/marcolo-30/k8s-gitops-lab:latest
+>>>>>>> Stashed changes
           imagePullPolicy: Always
           env:
             - name: SERVICE_NAME
@@ -26,9 +30,10 @@ spec:
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://10.43.138.250:4318"
             - name: WORKLOAD_SIZE
-              # A high value to keep the workers busy.
-              # Adjust if the CPU doesn't hit 100%.
               value: "200000"
+            - name: NUM_WORKERS
+              # Using 3 out of 4 cores to target ~75-80% CPU usage
+              value: "3"
           resources:
             # This pod is 'Burstable'. It is guaranteed 100m of CPU.
             requests:
