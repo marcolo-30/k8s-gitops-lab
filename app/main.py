@@ -23,12 +23,7 @@ OTEL_ENDPOINT = os.getenv(
     "http://otel-collector.observability.svc.cluster.local:4318"
 )
 
-# How long to sleep between iterations — controls CPU baseline
-# 0.05 = ~30-40% CPU at rest, visible drop when burner kicks in
-SLEEP_BETWEEN_ITERATIONS = float(os.getenv("SLEEP_BETWEEN_ITERATIONS", "0.05"))
-
 print(f"[INFO]  [startup] service={SERVICE_NAME} node={NODE_NAME} cost={NODE_COST} endpoint={OTEL_ENDPOINT}")
-print(f"[INFO]  [startup] sleep_between_iterations={SLEEP_BETWEEN_ITERATIONS}s")
 
 # --- OTEL setup ---
 inner_exporter = OTLPMetricExporter(endpoint=f"{OTEL_ENDPOINT}/v1/metrics")
@@ -105,9 +100,6 @@ def track_cpu():
 threading.Thread(target=track_cpu, daemon=True).start()
 
 # --- Heavy work loop ---
-# Uses sqrt + log so the CPU actually has to work for each iteration
-# Sleep between iterations creates a stable baseline (~30-40% CPU)
-# so the burner's impact is clearly visible in Grafana
 def work_loop():
     global _iterations_per_sec, _task_duration_ms
     iteration    = 0
@@ -115,22 +107,15 @@ def work_loop():
     window_iters = 0
 
     print("[INFO]  [work-loop] Starting heavy work loop")
-    print("[INFO]  [work-loop] Each iteration: sum(sqrt(i) * log(i+1)) for 50 elements")
-    print(f"[INFO]  [work-loop] Sleep between iterations: {SLEEP_BETWEEN_ITERATIONS}s")
-    #print(f"[INFO]  [work-loop] Expected baseline: ~{int(1/SLEEP_BETWEEN_ITERATIONS)} iter/s at low CPU")
+    print("[INFO]  [work-loop] Each iteration: sum(sqrt(i) * log(i+1)) for 500 elements")
 
     while True:
         # Heavy math
         t0 = time.time()
-        _ = sum(math.sqrt(i) * math.log(i + 1) for i in range(50))
+        _ = sum(math.sqrt(i) * math.log(i + 1) for i in range(500))
         t1 = time.time()
 
         _task_duration_ms = (t1 - t0) * 1000  # ms per work unit
-
-        # 👇 controlled rest — this is what creates the observable baseline
-        # When burner runs, the sleep gets skipped by the scheduler
-        # so iter/s drops and task_ms rises — visible in Grafana
-        time.sleep(SLEEP_BETWEEN_ITERATIONS)
 
         iteration    += 1
         window_iters += 1

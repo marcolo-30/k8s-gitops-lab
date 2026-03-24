@@ -30,8 +30,6 @@ spec:
                   fieldPath: spec.nodeName
             - name: NODE_COST
               value: "1.0"        # RPi = cheap. Change to "2.5" when on vm1node
-            - name: SLEEP_BETWEEN_ITERATIONS
-              value: "0.00001"       # 50ms rest → ~30-40% CPU baseline
           resources:
             requests:
               cpu: "100m"
