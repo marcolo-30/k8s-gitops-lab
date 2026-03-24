@@ -17,7 +17,7 @@ spec:
         kubernetes.io/hostname: r3-node
       containers:
         - name: main-app
-          image: ghcr.io/marcolo-30/k8s-gitops-lab:f17ac22f4471211d7c5eae267965ef799689f7e2
+          image: ghcr.io/marcolo-30/k8s-gitops-lab:423550aa2359f232bc74e7300f0272780534784a
           imagePullPolicy: Always
           env:
             - name: SERVICE_NAME
