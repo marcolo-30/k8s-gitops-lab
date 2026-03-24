@@ -107,12 +107,12 @@ def work_loop():
     window_iters = 0
 
     print("[INFO]  [work-loop] Starting heavy work loop")
-    print("[INFO]  [work-loop] Each iteration: sum(sqrt(i) * log(i+1)) for 500 elements")
+    print("[INFO]  [work-loop] Each iteration: sum(sqrt(i) * log(i+1)) for 200 elements")
 
     while True:
         # Heavy math
         t0 = time.time()
-        _ = sum(math.sqrt(i) * math.log(i + 1) for i in range(500))
+        _ = sum(math.sqrt(i) * math.log(i + 1) for i in range(200))
         t1 = time.time()
 
         _task_duration_ms = (t1 - t0) * 1000  # ms per work unit
