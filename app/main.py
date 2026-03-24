@@ -102,7 +102,7 @@ def work_loop():
     while True:
         # Heavy math — Reduced workload for RPi
         t0 = time.time()
-        _ = sum(math.sqrt(i) * math.log(i + 1) for i in range(5_000))
+        _ = sum(math.sqrt(i) * math.log(i + 1) for i in range(500))
         t1 = time.time()
 
         iteration    += 1
