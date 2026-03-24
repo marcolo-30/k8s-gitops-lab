@@ -114,13 +114,13 @@ def work_loop():
     window_start = time.time()
     window_iters = 0
 
-    # A small, fixed workload. The sleep is the important part.
-    workload = 500 
+    # A workload that takes ~25-30ms to complete
+    workload = 70_000 
 
     print("[INFO]  [work-loop] Starting heavy work loop")
     print(f"[INFO]  [work-loop] Each iteration: sum(sqrt(i) * log(i+1)) for {workload} elements")
     print(f"[INFO]  [work-loop] Sleep between iterations: {SLEEP_BETWEEN_ITERATIONS}s")
-    print(f"[INFO]  [work-loop] Expected baseline: ~{int(1/SLEEP_BETWEEN_ITERATIONS)} iter/s at low CPU")
+    print(f"[INFO]  [work-loop] Expected baseline: ~{int(1/(SLEEP_BETWEEN_ITERATIONS + 0.03))} iter/s at ~30-40% CPU")
 
     while True:
         # Heavy math
