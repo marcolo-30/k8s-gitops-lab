@@ -14,17 +14,24 @@ spec:
         app: main-app
     spec:
       nodeSelector:
-        kubernetes.io/hostname: vm1node
+        kubernetes.io/hostname: r3-node # Make sure this is the correct node
       containers:
         - name: main-app
-          image: ghcr.io/marcolo-30/k8s-gitops-lab:d92349a90fd75bfb0822fa5943288b7302094ac9
+          # IMPORTANT: You will need to build and push a new image with the updated main.py
+          image: ghcr.io/marcolo-30/k8s-gitops-lab:latest
           imagePullPolicy: Always
           env:
             - name: SERVICE_NAME
               value: "main-app"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://10.43.138.250:4318"
+            - name: WORKLOAD_SIZE
+              # 50000 is good for a fast VM. 5000 is better for a Raspberry Pi.
+              # Tune this value until you see a baseline CPU usage below 100%.
+              value: "5000"
           resources:
+            # This pod is 'Burstable'. It is guaranteed 100m of CPU.
             requests:
               cpu: "100m"
               memory: "64Mi"
+            # By NOT setting a CPU limit, it can be throttled by other pods.
