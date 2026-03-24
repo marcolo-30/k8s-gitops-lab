@@ -115,14 +115,14 @@ def work_loop():
     window_iters = 0
 
     print("[INFO]  [work-loop] Starting heavy work loop")
-    print("[INFO]  [work-loop] Each iteration: sum(sqrt(i) * log(i+1)) for 5,000 elements")
+    print("[INFO]  [work-loop] Each iteration: sum(sqrt(i) * log(i+1)) for 50 elements")
     print(f"[INFO]  [work-loop] Sleep between iterations: {SLEEP_BETWEEN_ITERATIONS}s")
-    print(f"[INFO]  [work-loop] Expected baseline: ~{int(1/SLEEP_BETWEEN_ITERATIONS)} iter/s at low CPU")
+    #print(f"[INFO]  [work-loop] Expected baseline: ~{int(1/SLEEP_BETWEEN_ITERATIONS)} iter/s at low CPU")
 
     while True:
         # Heavy math
         t0 = time.time()
-        _ = sum(math.sqrt(i) * math.log(i + 1) for i in range(500))
+        _ = sum(math.sqrt(i) * math.log(i + 1) for i in range(50))
         t1 = time.time()
 
         _task_duration_ms = (t1 - t0) * 1000  # ms per work unit
