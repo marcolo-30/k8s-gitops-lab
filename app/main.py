@@ -122,7 +122,7 @@ def work_loop():
     while True:
         # Heavy math
         t0 = time.time()
-        _ = sum(math.sqrt(i) * math.log(i + 1) for i in range(5_000))
+        _ = sum(math.sqrt(i) * math.log(i + 1) for i in range(500))
         t1 = time.time()
 
         _task_duration_ms = (t1 - t0) * 1000  # ms per work unit
