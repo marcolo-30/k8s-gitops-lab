@@ -1,5 +1,5 @@
 # app/main.py
-# Goal: A multi-process app that allows configuring CPU core usage.
+# Goal: A multi-process app that allows configuring CPU core usage and reports node temperature.
 
 import os
 import time
@@ -18,8 +18,8 @@ from opentelemetry.sdk.resources import Resource
 SERVICE_NAME = os.getenv("SERVICE_NAME", "main-app")
 OTEL_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel-collector.observability.svc.cluster.local:4318")
 WORKLOAD_SIZE = int(os.getenv("WORKLOAD_SIZE", "200000"))
-# Allow configuring the number of workers. Defaults to all cores if not set.
 NUM_WORKERS = int(os.getenv("NUM_WORKERS", multiprocessing.cpu_count()))
+TEMP_FILE_PATH = "/sys/class/thermal/thermal_zone0/temp"
 
 print(f"[INFO]  [startup] service={SERVICE_NAME}, workers={NUM_WORKERS}, workload_size={WORKLOAD_SIZE}")
 
@@ -34,6 +34,7 @@ meter = metrics.get_meter("main-app.meter")
 _current_cpu = 0.0
 _iterations_per_sec = 0.0
 _task_duration_ms = 0.0
+_node_temperature_celsius = 0.0
 
 def get_cpu(options: CallbackOptions):
     yield Observation(_current_cpu, {"service": SERVICE_NAME})
@@ -44,20 +45,40 @@ def get_iterations(options: CallbackOptions):
 def get_task_duration(options: CallbackOptions):
     yield Observation(_task_duration_ms, {"service": SERVICE_NAME})
 
+def get_temperature(options: CallbackOptions):
+    yield Observation(_node_temperature_celsius, {"service": SERVICE_NAME})
+
 meter.create_observable_gauge("main_app.cpu_percent", callbacks=[get_cpu], description="Total CPU usage of the pod (main + workers).")
 meter.create_observable_gauge("main_app.iterations_per_sec", callbacks=[get_iterations], description="Iterations per second of the main process.")
 meter.create_observable_gauge("main_app.task_duration_ms", callbacks=[get_task_duration], description="Task duration of the main process.")
+meter.create_observable_gauge("main_app.node_temperature_celsius", callbacks=[get_temperature], description="Temperature of the node's CPU in Celsius.")
 
 print("[INFO]  [startup] Metrics registered.")
 
-# --- CPU Sampler Thread ---
+# --- Sensor Threads ---
 def track_cpu():
     global _current_cpu
     process = psutil.Process()
     while True:
         _current_cpu = process.cpu_percent(interval=1)
 
+def track_temperature():
+    global _node_temperature_celsius
+    while True:
+        try:
+            with open(TEMP_FILE_PATH, 'r') as f:
+                # The value is in milli-Celsius, e.g., 45000 -> 45.0 C
+                _node_temperature_celsius = int(f.read().strip()) / 1000.0
+        except FileNotFoundError:
+            # Silently fail if the file doesn't exist (e.g., not on a RPi)
+            _node_temperature_celsius = 0.0
+        except Exception as e:
+            print(f"[ERROR] [temp-tracker] Could not read temperature: {e}")
+            _node_temperature_celsius = 0.0
+        time.sleep(2) # Read temperature every 2 seconds
+
 threading.Thread(target=track_cpu, daemon=True).start()
+threading.Thread(target=track_temperature, daemon=True).start()
 
 # --- Worker Function ---
 def burn_cpu(_):
@@ -66,9 +87,7 @@ def burn_cpu(_):
 
 # --- Main Execution Block ---
 if __name__ == "__main__":
-    # Ensure we don't try to use more workers than available cores
     if NUM_WORKERS > multiprocessing.cpu_count():
-        print(f"[WARN]  [main] NUM_WORKERS ({NUM_WORKERS}) is greater than available cores ({multiprocessing.cpu_count()}). Capping to max available.")
         NUM_WORKERS = multiprocessing.cpu_count()
 
     print(f"[INFO]  [main] Starting {NUM_WORKERS} worker processes.")
@@ -76,13 +95,6 @@ if __name__ == "__main__":
     pool = multiprocessing.Pool(processes=NUM_WORKERS)
     pool.map_async(burn_cpu, range(NUM_WORKERS))
 
-    window_start, window_iters = time.time(), 0
     while True:
-        time.sleep(1.0)
-        window_iters += 1
-        
-        elapsed = time.time() - window_start
-        if elapsed >= 1.0:
-            _iterations_per_sec = window_iters / elapsed
-            print(f"[INFO] [main-process] cpu={_current_cpu:.1f}% (Pod Total)")
-            window_start, window_iters = time.time(), 0
+        time.sleep(5) # Log pod status every 5 seconds
+        print(f"[INFO] [main-process] cpu={_current_cpu:.1f}%, temp={_node_temperature_celsius:.1f}°C")
