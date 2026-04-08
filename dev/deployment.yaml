@@ -23,13 +23,21 @@ spec:
             - name: SERVICE_NAME
               value: "main-app"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: "http://10.43.138.250:4318"
+              value: "http://otel-collector.observability.svc.cluster.local:4318"
             - name: WORKLOAD_SIZE
               value: "200000"
             - name: NUM_WORKERS
-              # Using 3 out of 4 cores to target ~75% CPU usage, keeping it below 90%
               value: "3"
           resources:
             requests:
               cpu: "100m"
               memory: "128Mi"
+          volumeMounts:
+            - name: sys-thermal
+              mountPath: /sys/class/thermal
+              readOnly: true
+      volumes:
+        - name: sys-thermal
+          hostPath:
+            path: /sys/class/thermal
+            type: DirectoryReadOnly

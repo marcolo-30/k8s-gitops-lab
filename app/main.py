@@ -1,5 +1,5 @@
 # app/main.py
-# Goal: A multi-process app that allows configuring CPU core usage and reports node temperature.
+# Goal: A multi-process app that saturates all available CPU cores and reports total worker iterations.
 
 import os
 import time
@@ -32,25 +32,20 @@ meter = metrics.get_meter("main-app.meter")
 
 # --- Metrics State & Callbacks ---
 _current_cpu = 0.0
-_iterations_per_sec = 0.0
-_task_duration_ms = 0.0
+_total_worker_iterations_per_sec = 0.0 # New metric for total work done
 _node_temperature_celsius = 0.0
 
 def get_cpu(options: CallbackOptions):
     yield Observation(_current_cpu, {"service": SERVICE_NAME})
 
-def get_iterations(options: CallbackOptions):
-    yield Observation(_iterations_per_sec, {"service": SERVICE_NAME})
-
-def get_task_duration(options: CallbackOptions):
-    yield Observation(_task_duration_ms, {"service": SERVICE_NAME})
+def get_total_worker_iterations(options: CallbackOptions):
+    yield Observation(_total_worker_iterations_per_sec, {"service": SERVICE_NAME})
 
 def get_temperature(options: CallbackOptions):
     yield Observation(_node_temperature_celsius, {"service": SERVICE_NAME})
 
 meter.create_observable_gauge("main_app.cpu_percent", callbacks=[get_cpu], description="Total CPU usage of the pod (main + workers).")
-meter.create_observable_gauge("main_app.iterations_per_sec", callbacks=[get_iterations], description="Iterations per second of the main process.")
-meter.create_observable_gauge("main_app.task_duration_ms", callbacks=[get_task_duration], description="Task duration of the main process.")
+meter.create_observable_gauge("main_app.total_worker_iterations_per_sec", callbacks=[get_total_worker_iterations], description="Total work units completed by all workers per second.")
 meter.create_observable_gauge("main_app.node_temperature_celsius", callbacks=[get_temperature], description="Temperature of the node's CPU in Celsius.")
 
 print("[INFO]  [startup] Metrics registered.")
@@ -67,23 +62,23 @@ def track_temperature():
     while True:
         try:
             with open(TEMP_FILE_PATH, 'r') as f:
-                # The value is in milli-Celsius, e.g., 45000 -> 45.0 C
                 _node_temperature_celsius = int(f.read().strip()) / 1000.0
         except FileNotFoundError:
-            # Silently fail if the file doesn't exist (e.g., not on a RPi)
             _node_temperature_celsius = 0.0
         except Exception as e:
             print(f"[ERROR] [temp-tracker] Could not read temperature: {e}")
             _node_temperature_celsius = 0.0
-        time.sleep(2) # Read temperature every 2 seconds
+        time.sleep(2)
 
 threading.Thread(target=track_cpu, daemon=True).start()
 threading.Thread(target=track_temperature, daemon=True).start()
 
 # --- Worker Function ---
-def burn_cpu(_):
+# This function will be run by each worker process to burn CPU and count its iterations.
+def burn_cpu(shared_iterations_counter):
     while True:
         _ = sum(math.sqrt(i) * math.log(i + 1) for i in range(WORKLOAD_SIZE))
+        shared_iterations_counter.value += 1 # Increment shared counter
 
 # --- Main Execution Block ---
 if __name__ == "__main__":
@@ -92,9 +87,35 @@ if __name__ == "__main__":
 
     print(f"[INFO]  [main] Starting {NUM_WORKERS} worker processes.")
     
+    # Use a Manager to create a shared counter for total iterations
+    manager = multiprocessing.Manager()
+    shared_iterations_counter = manager.Value('L', 0) # 'L' for long integer
+
+    # Create and start the pool of worker processes, passing the shared counter
     pool = multiprocessing.Pool(processes=NUM_WORKERS)
-    pool.map_async(burn_cpu, range(NUM_WORKERS))
+    # map_async expects an iterable for the second argument, so we pass a list of the counter for each worker
+    pool.map_async(burn_cpu, [shared_iterations_counter] * NUM_WORKERS)
+
+    last_total_iterations = 0
+    last_time = time.time()
 
     while True:
-        time.sleep(5) # Log pod status every 5 seconds
-        print(f"[INFO] [main-process] cpu={_current_cpu:.1f}%, temp={_node_temperature_celsius:.1f}°C")
+        time.sleep(1.0) # Report metrics every second
+        
+        current_time = time.time()
+        elapsed_time = current_time - last_time
+        
+        current_total_iterations = shared_iterations_counter.value
+        delta_iterations = current_total_iterations - last_total_iterations
+        
+        if elapsed_time > 0:
+            _total_worker_iterations_per_sec = delta_iterations / elapsed_time
+        else:
+            _total_worker_iterations_per_sec = 0.0
+
+        print(f"[INFO] [main-process] cpu={_current_cpu:.1f}%, "
+              f"total_iter/s={_total_worker_iterations_per_sec:.1f}, "
+              f"temp={_node_temperature_celsius:.1f}°C")
+        
+        last_total_iterations = current_total_iterations
+        last_time = current_time
