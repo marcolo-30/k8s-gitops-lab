@@ -19,9 +19,9 @@ spec:
         - name: main-app
           # IMPORTANT: You will need to build and push a new image with the updated main.py
 <<<<<<< Updated upstream
-          image: ghcr.io/marcolo-30/k8s-gitops-lab:00f1a82c018e8e5163ef4373785b520618c8f2cb
+          image: ghcr.io/marcolo-30/k8s-gitops-lab:d0f619a110fa049bc7dcff543ee8e4c5e70d8d88
 =======
-          image: ghcr.io/marcolo-30/k8s-gitops-lab:00f1a82c018e8e5163ef4373785b520618c8f2cb
+          image: ghcr.io/marcolo-30/k8s-gitops-lab:d0f619a110fa049bc7dcff543ee8e4c5e70d8d88
 >>>>>>> Stashed changes
           imagePullPolicy: Always
           env:
