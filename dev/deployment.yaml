@@ -17,7 +17,7 @@ spec:
         kubernetes.io/hostname: r3-node # Make sure this is the correct node
       containers:
         - name: main-app
-          image: ghcr.io/marcolo-30/k8s-gitops-lab:latest
+          image: ghcr.io/marcolo-30/k8s-gitops-lab:91088be24059f81074a9c02d925e121b546a63a9
           imagePullPolicy: Always
           env:
             - name: SERVICE_NAME
