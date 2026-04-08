@@ -33,7 +33,7 @@ spec:
               value: "200000"
             - name: NUM_WORKERS
               # Using 3 out of 4 cores to target ~75-80% CPU usage
-              value: "3"
+              value: "2"
           resources:
             # This pod is 'Burstable'. It is guaranteed 100m of CPU.
             requests:
