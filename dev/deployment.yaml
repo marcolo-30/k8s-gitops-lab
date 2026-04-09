@@ -17,17 +17,22 @@ spec:
         kubernetes.io/hostname: r3-node # Make sure this is the correct node
       containers:
         - name: main-app
-          image: ghcr.io/marcolo-30/k8s-gitops-lab:5e9ef7fca3fc55879df4b3bb0e14dedc644a002d
+          image: ghcr.io/marcolo-30/k8s-gitops-lab:latest
           imagePullPolicy: Always
           env:
             - name: SERVICE_NAME
               value: "main-app"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: "http://otel-collector.observability.svc.cluster.local:4318"
+              value: "http://10.43.138.250:4318"
             - name: WORKLOAD_SIZE
               value: "200000"
             - name: NUM_WORKERS
               value: "3"
+            # QoS thresholds
+            - name: QOS_CPU_HEALTHY_THRESHOLD
+              value: "70.0" # If pod CPU >= 70%, QoS is 100
+            - name: QOS_CPU_CRITICAL_THRESHOLD
+              value: "20.0" # If pod CPU <= 20%, QoS is 0
           resources:
             requests:
               cpu: "100m"
