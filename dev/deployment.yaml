@@ -28,15 +28,12 @@ spec:
               value: "200000"
             - name: NUM_WORKERS
               value: "3"
-            # Autocalibración: segundos de warmup para medir baseline de iter/s
             - name: CALIBRATION_SECONDS
               value: "30"
-            # Pesos del QoS compuesto (deben sumar 1.0)
             - name: QOS_WEIGHT_THROTTLE
-              value: "0.70"   # señal primaria: throttling de cgroups
+              value: "0.70"
             - name: QOS_WEIGHT_ITERS
-              value: "0.30"   # señal secundaria: iter/s vs baseline
-            # EMA: qué tan rápido reacciona (0.1=suave, 0.3=reactivo)
+              value: "0.30"
             - name: EMA_ALPHA
               value: "0.15"
           resources:
@@ -44,23 +41,21 @@ spec:
               cpu: "100m"
               memory: "128Mi"
             limits:
-              cpu: "1"        # ← activa el throttling de cgroups
+              cpu: "1"
               memory: "256Mi"
           volumeMounts:
-            - name: sys-thermal
+            - name: sys-thermal       # ← nombre debe coincidir exactamente con volumes[]
               mountPath: /sys/class/thermal
-              readOnly: true
-            # Exponer cgroups del propio pod para leer cpu.stat
-            - name: cgroup-cpu
-              mountPath: /sys/fs/cgroup/cpu
+              readOnly: true          # readOnly va aquí, no en hostPath.type
+            - name: cgroup-unified    # ← nombre actualizado para claridad
+              mountPath: /sys/fs/cgroup
               readOnly: true
       volumes:
         - name: sys-thermal
           hostPath:
             path: /sys/class/thermal
-            type: Directory
-        # cgroups v1 — ajustar el path si el nodo usa cgroups v2
-        - name: cgroup-cpu
+            type: Directory           # solo "Directory", nunca "DirectoryReadOnly"
+        - name: cgroup-unified
           hostPath:
-            path: /sys/fs/cgroup/cpu
+            path: /sys/fs/cgroup      # ← cgroups v2: jerarquía unificada
             type: Directory
