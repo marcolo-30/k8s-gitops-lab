@@ -45,4 +45,4 @@ spec:
         - name: sys-thermal
           hostPath:
             path: /sys/class/thermal
-            type: DirectoryReadOnly
+            type: Directory # Corregido: debe ser 'Directory'
