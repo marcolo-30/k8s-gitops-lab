@@ -350,7 +350,7 @@ if __name__ == "__main__":
             f"cpu={_current_cpu:.1f}% | "
             f"iter/s={_total_worker_iterations_per_sec:.1f} | "
             f"ema={_ema_iterations_per_sec:.1f} | "
-            f"baseline={_baseline_iters:.1f if _baseline_iters else 'N/A'} | "
+            f"baseline={f'{_baseline_iters:.1f}' if _baseline_iters is not None else 'N/A'} | "
             f"throttle={_throttle_rate_pct:.1f}% | "
             f"temp={_node_temperature_celsius:.1f}°C | "
             f"QoS={_app_qos:.1f} "
