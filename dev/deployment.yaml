@@ -25,9 +25,9 @@ spec:
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://10.43.138.250:4318"
             - name: WORKLOAD_SIZE
-              value: "200000"
+              value: "80000"
             - name: NUM_WORKERS
-              value: "3"
+              value: "1"
             - name: CALIBRATION_SECONDS
               value: "30"
             - name: QOS_WEIGHT_THROTTLE
@@ -36,26 +36,30 @@ spec:
               value: "0.30"
             - name: EMA_ALPHA
               value: "0.15"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
           resources:
             requests:
-              cpu: "100m"
+              cpu: "100m"       # ← request bajo, solo reserva mínima
               memory: "128Mi"
             limits:
-              cpu: "500m"
+              cpu: "1500m"      # ← 1.5 cores, margen para correr sin throttle
               memory: "256Mi"
           volumeMounts:
-            - name: sys-thermal       # ← nombre debe coincidir exactamente con volumes[]
+            - name: sys-thermal
               mountPath: /sys/class/thermal
-              readOnly: true          # readOnly va aquí, no en hostPath.type
-            - name: cgroup-unified    # ← nombre actualizado para claridad
+              readOnly: true
+            - name: cgroup-unified
               mountPath: /sys/fs/cgroup
               readOnly: true
       volumes:
         - name: sys-thermal
           hostPath:
             path: /sys/class/thermal
-            type: Directory           # solo "Directory", nunca "DirectoryReadOnly"
+            type: Directory
         - name: cgroup-unified
           hostPath:
-            path: /sys/fs/cgroup      # ← cgroups v2: jerarquía unificada
+            path: /sys/fs/cgroup
             type: Directory
