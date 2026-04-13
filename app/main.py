@@ -55,9 +55,48 @@ print(f"[INFO]  [startup] QoS config: threshold={LOAD_THRESHOLD}% floor={QOS_FLO
 # ---------------------------------------------------------------------------
 # OTEL Setup
 # ---------------------------------------------------------------------------
+
+# Wrapper that logs every export attempt so you can confirm metrics are
+# being pushed: shows push count, OK/ERROR status, QoS and endpoint.
+from opentelemetry.sdk.metrics.export import MetricExportResult
+
+class LoggingMetricExporter:
+    def __init__(self, inner_exporter):
+        self._inner      = inner_exporter
+        self._push_count = 0
+
+    def export(self, metrics_data, **kwargs):
+        self._push_count += 1
+        try:
+            result = self._inner.export(metrics_data, **kwargs)
+            status = "OK   " if result == MetricExportResult.SUCCESS else "FAIL "
+            print(
+                f"[PUSH] [{self._push_count:05d}] {status} | "
+                f"endpoint={OTEL_ENDPOINT} | "
+                f"QoS={_app_qos:.1f} load_pct={_node_load_pct:.1f}% "
+                f"load_sig={_qos_signal_load:.0f} iter_sig={_qos_signal_iters:.0f}",
+                flush=True
+            )
+            return result
+        except Exception as e:
+            print(
+                f"[PUSH] [{self._push_count:05d}] ERROR | "
+                f"endpoint={OTEL_ENDPOINT} | exception={e}",
+                flush=True
+            )
+            return MetricExportResult.FAILURE
+
+    def shutdown(self, timeout_millis=30_000, **kwargs):
+        return self._inner.shutdown(timeout_millis=timeout_millis, **kwargs)
+
+    def force_flush(self, timeout_millis=10_000):
+        return self._inner.force_flush(timeout_millis=timeout_millis)
+
 resource = Resource(attributes={"service.name": SERVICE_NAME})
 reader   = PeriodicExportingMetricReader(
-    OTLPMetricExporter(endpoint=f"{OTEL_ENDPOINT}/v1/metrics"),
+    LoggingMetricExporter(
+        OTLPMetricExporter(endpoint=f"{OTEL_ENDPOINT}/v1/metrics")
+    ),
     export_interval_millis=2000,
 )
 meter_provider = MeterProvider(resource=resource, metric_readers=[reader])
