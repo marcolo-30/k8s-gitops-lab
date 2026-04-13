@@ -56,19 +56,20 @@ print(f"[INFO]  [startup] QoS config: threshold={LOAD_THRESHOLD}% floor={QOS_FLO
 # OTEL Setup
 # ---------------------------------------------------------------------------
 
-# Wrapper that logs every export attempt so you can confirm metrics are
-# being pushed: shows push count, OK/ERROR status, QoS and endpoint.
+# Subclass of OTLPMetricExporter that logs every export attempt.
+# Inheriting (not wrapping) so OTEL internal attributes like
+# _preferred_temporality are present and PeriodicExportingMetricReader works.
 from opentelemetry.sdk.metrics.export import MetricExportResult
 
-class LoggingMetricExporter:
-    def __init__(self, inner_exporter):
-        self._inner      = inner_exporter
+class LoggingMetricExporter(OTLPMetricExporter):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self._push_count = 0
 
     def export(self, metrics_data, **kwargs):
         self._push_count += 1
         try:
-            result = self._inner.export(metrics_data, **kwargs)
+            result = super().export(metrics_data, **kwargs)
             status = "OK   " if result == MetricExportResult.SUCCESS else "FAIL "
             print(
                 f"[PUSH] [{self._push_count:05d}] {status} | "
@@ -86,17 +87,9 @@ class LoggingMetricExporter:
             )
             return MetricExportResult.FAILURE
 
-    def shutdown(self, timeout_millis=30_000, **kwargs):
-        return self._inner.shutdown(timeout_millis=timeout_millis, **kwargs)
-
-    def force_flush(self, timeout_millis=10_000):
-        return self._inner.force_flush(timeout_millis=timeout_millis)
-
 resource = Resource(attributes={"service.name": SERVICE_NAME})
 reader   = PeriodicExportingMetricReader(
-    LoggingMetricExporter(
-        OTLPMetricExporter(endpoint=f"{OTEL_ENDPOINT}/v1/metrics")
-    ),
+    LoggingMetricExporter(endpoint=f"{OTEL_ENDPOINT}/v1/metrics"),
     export_interval_millis=2000,
 )
 meter_provider = MeterProvider(resource=resource, metric_readers=[reader])
