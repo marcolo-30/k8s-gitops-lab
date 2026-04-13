@@ -30,7 +30,12 @@ spec:
               value: "1"
             - name: CALIBRATION_SECONDS
               value: "30"
-            - name: QOS_WEIGHT_THROTTLE
+            # --- QoS load-based signal (replaces throttle) ---
+            - name: QOS_LOAD_THRESHOLD   # node load% where QoS starts degrading
+              value: "70"
+            - name: QOS_FLOOR            # minimum QoS when node is at 100% load
+              value: "5"
+            - name: QOS_WEIGHT_LOAD      # weight for node load signal (was QOS_WEIGHT_THROTTLE)
               value: "0.70"
             - name: QOS_WEIGHT_ITERS
               value: "0.30"
@@ -42,24 +47,19 @@ spec:
                   fieldPath: metadata.name
           resources:
             requests:
-              cpu: "100m"       # ← request bajo, solo reserva mínima
+              cpu: "100m"      # keep for scheduling purposes
               memory: "128Mi"
             limits:
-              cpu: "950m"      # ← 1.5 cores, margen para correr sin throttle
-              memory: "256Mi"
+              memory: "256Mi"  # always keep memory limit
+              # NO limits.cpu — removed intentionally to eliminate throttling
           volumeMounts:
             - name: sys-thermal
               mountPath: /sys/class/thermal
               readOnly: true
-            - name: cgroup-unified
-              mountPath: /sys/fs/cgroup
-              readOnly: true
+            # cgroup volume removed — no longer needed without limits.cpu
       volumes:
         - name: sys-thermal
           hostPath:
             path: /sys/class/thermal
             type: Directory
-        - name: cgroup-unified
-          hostPath:
-            path: /sys/fs/cgroup
-            type: Directory
+        # cgroup-unified volume removed — track_throttle() replaced by track_node_load()
