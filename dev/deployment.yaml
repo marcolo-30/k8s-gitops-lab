@@ -17,11 +17,7 @@ spec:
         kubernetes.io/hostname: r3-node
       containers:
         - name: main-app
-<<<<<<< Updated upstream
           image: ghcr.io/marcolo-30/k8s-gitops-lab:edac365720c495a386f2d036025f158ab0fd0886
-=======
-          image: ghcr.io/marcolo-30/k8s-gitops-lab:edac365720c495a386f2d036025f158ab0fd0886
->>>>>>> Stashed changes
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
