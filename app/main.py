@@ -3,6 +3,7 @@
 #   1. Node load5 con curva de degradación exponencial (señal primaria) — NO requiere limits.cpu
 #   2. EMA de iterations/sec vs baseline                                (señal secundaria)
 # Métricas exportadas: cpu, iter/s, temp, QoS, node_load_pct, señales individuales
+# NUEVO: Añade un endpoint /health en el puerto 8080
 
 import os
 import time
@@ -10,6 +11,9 @@ import math
 import threading
 import psutil
 import multiprocessing
+import http.server
+import socketserver
+import json
 from opentelemetry import metrics
 from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 from opentelemetry.metrics import CallbackOptions, Observation
@@ -26,6 +30,7 @@ OTEL_ENDPOINT  = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT",
 WORKLOAD_SIZE  = int(os.getenv("WORKLOAD_SIZE", "200000"))
 NUM_WORKERS    = int(os.getenv("NUM_WORKERS", str(multiprocessing.cpu_count())))
 TEMP_FILE_PATH = "/sys/class/thermal/thermal_zone0/temp"
+HEALTH_PORT    = 8080
 
 CALIBRATION_SECONDS = int(os.getenv("CALIBRATION_SECONDS", "30"))
 
@@ -36,9 +41,7 @@ WEIGHT_ITERS   = float(os.getenv("QOS_WEIGHT_ITERS", "0.30"))
 EMA_ALPHA      = float(os.getenv("EMA_ALPHA", "0.15"))
 
 # ---------------------------------------------------------------------------
-# Estado compartido — solo el proceso __main__ escribe estos valores.
-# Los procesos worker (Pool) no llegan a este punto porque burn_cpu()
-# se ejecuta en un proceso separado sin re-importar el módulo completo.
+# Estado compartido
 # ---------------------------------------------------------------------------
 _current_cpu                     = 0.0
 _total_worker_iterations_per_sec = 0.0
@@ -55,11 +58,33 @@ _baseline_iters                  = None
 _is_calibrating                  = True
 
 # ---------------------------------------------------------------------------
+# Health Check Endpoint
+# ---------------------------------------------------------------------------
+class HealthCheckHandler(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/health':
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            response = {
+                "status": "ok",
+                "is_calibrating": _is_calibrating,
+                "cpu_percent": _current_cpu,
+                "qos": _app_qos,
+                "node_load_percent": _node_load_pct,
+                "iterations_per_sec": _total_worker_iterations_per_sec
+            }
+            self.wfile.write(json.dumps(response).encode('utf-8'))
+        else:
+            self.send_error(404, "Not Found")
+
+def start_health_server():
+    with socketserver.ThreadingTCPServer(("", HEALTH_PORT), HealthCheckHandler) as httpd:
+        print(f"[INFO]  [health-server] Sirviendo en el puerto {HEALTH_PORT}", flush=True)
+        httpd.serve_forever()
+
+# ---------------------------------------------------------------------------
 # LoggingMetricExporter
-# Definido a nivel de módulo (requerido para ser serializable por pickle),
-# pero INSTANCIADO solo dentro de __main__ — después del fork de Pool —
-# para que ningún proceso hijo tenga su propio MeterProvider activo.
-# Esto elimina los [PUSH] duplicados con QoS=100/load=0 que venían del fork.
 # ---------------------------------------------------------------------------
 class LoggingMetricExporter(OTLPMetricExporter):
     def __init__(self, *args, **kwargs):
@@ -128,8 +153,6 @@ def cb_baseline(o: CallbackOptions):
 
 # ---------------------------------------------------------------------------
 # QoS: curva de degradación exponencial
-# load_pct <= LOAD_THRESHOLD  →  QoS = 100 (zona sana)
-# load_pct == 100%            →  QoS = QOS_FLOOR (zona colapsada)
 # ---------------------------------------------------------------------------
 def _compute_load_qos_signal(load_pct: float) -> float:
     if load_pct <= LOAD_THRESHOLD:
@@ -139,7 +162,7 @@ def _compute_load_qos_signal(load_pct: float) -> float:
     return max(QOS_FLOOR, QOS_FLOOR + degraded * (100.0 - QOS_FLOOR))
 
 # ---------------------------------------------------------------------------
-# Thread: node load via /proc/loadavg (no namespaciado — carga real del nodo)
+# Thread: node load
 # ---------------------------------------------------------------------------
 def track_node_load():
     global _node_load1, _node_load5, _node_load15, _node_load_pct, _qos_signal_load
@@ -159,7 +182,7 @@ def track_node_load():
             print(f"[ERROR] [load-tracker] {e}", flush=True)
 
 # ---------------------------------------------------------------------------
-# Thread: CPU del proceso (main + workers)
+# Thread: CPU del proceso
 # ---------------------------------------------------------------------------
 def track_cpu():
     global _current_cpu
@@ -216,7 +239,7 @@ def _recalculate_qos():
     ))
 
 # ---------------------------------------------------------------------------
-# Worker — proceso hijo, no toca OTEL ni globals del padre
+# Worker — proceso hijo
 # ---------------------------------------------------------------------------
 def burn_cpu(shared_iterations_counter):
     while True:
@@ -225,8 +248,6 @@ def burn_cpu(shared_iterations_counter):
 
 # ---------------------------------------------------------------------------
 # Main
-# OTEL se inicializa AQUÍ, después del fork de multiprocessing.Pool,
-# garantizando que solo existe UN MeterProvider en UN proceso.
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     if NUM_WORKERS > multiprocessing.cpu_count():
@@ -237,14 +258,17 @@ if __name__ == "__main__":
     print(f"[INFO]  [startup] QoS config: threshold={LOAD_THRESHOLD}% floor={QOS_FLOOR} "
           f"weights: load={WEIGHT_LOAD} iters={WEIGHT_ITERS}", flush=True)
 
-    # 1) Fork workers PRIMERO — proceso más limpio, sin sockets OTEL abiertos
+    # 1) Iniciar el servidor de health check en un hilo
+    threading.Thread(target=start_health_server, daemon=True).start()
+
+    # 2) Fork workers PRIMERO
     print(f"[INFO]  [main] Iniciando {NUM_WORKERS} workers.", flush=True)
     manager = multiprocessing.Manager()
     shared_iterations_counter = manager.Value("L", 0)
     pool = multiprocessing.Pool(processes=NUM_WORKERS)
     pool.map_async(burn_cpu, [shared_iterations_counter] * NUM_WORKERS)
 
-    # 2) OTEL setup post-fork — solo este proceso tiene el exporter
+    # 3) OTEL setup post-fork
     print("[INFO]  [main] Inicializando OTEL (post-fork)...", flush=True)
     resource       = Resource(attributes={"service.name": SERVICE_NAME})
     reader         = PeriodicExportingMetricReader(
@@ -255,34 +279,22 @@ if __name__ == "__main__":
     metrics.set_meter_provider(meter_provider)
     meter = metrics.get_meter("main-app.meter")
 
-    meter.create_observable_gauge("main_app.cpu_percent",
-        callbacks=[cb_cpu], description="CPU % del proceso main (psutil).")
-    meter.create_observable_gauge("main_app.total_worker_iterations_per_sec",
-        callbacks=[cb_iters], description="Iteraciones/s raw de los workers.")
-    meter.create_observable_gauge("main_app.ema_iterations_per_sec",
-        callbacks=[cb_iters_ema], description="Iteraciones/s suavizadas con EMA.")
-    meter.create_observable_gauge("main_app.node_temperature_celsius",
-        callbacks=[cb_temp], description="Temperatura del nodo en °C.")
-    meter.create_observable_gauge("main_app.node_load_pct",
-        callbacks=[cb_node_load_pct], description="Node load5 normalizado a % respecto a num CPUs.")
-    meter.create_observable_gauge("main_app.node_load1",
-        callbacks=[cb_node_load1], description="Node load average 1 minuto (raw).")
-    meter.create_observable_gauge("main_app.node_load5",
-        callbacks=[cb_node_load5], description="Node load average 5 minutos (raw).")
-    meter.create_observable_gauge("main_app.qos",
-        callbacks=[cb_qos], description="QoS compuesto 0-100.")
-    meter.create_observable_gauge("main_app.qos_signal_load",
-        callbacks=[cb_qos_load], description="Señal QoS individual: node load degradation (0-100).")
-    meter.create_observable_gauge("main_app.qos_signal_iters",
-        callbacks=[cb_qos_iters], description="Señal QoS individual: iterations/s vs baseline (0-100).")
-    meter.create_observable_gauge("main_app.is_calibrating",
-        callbacks=[cb_calibrating], description="1 mientras el pod está autocalibrandose, 0 después.")
-    meter.create_observable_gauge("main_app.baseline_iters_per_sec",
-        callbacks=[cb_baseline], description="Baseline de iter/s medido durante la calibración.")
+    meter.create_observable_gauge("main_app.cpu_percent", callbacks=[cb_cpu])
+    meter.create_observable_gauge("main_app.total_worker_iterations_per_sec", callbacks=[cb_iters])
+    meter.create_observable_gauge("main_app.ema_iterations_per_sec", callbacks=[cb_iters_ema])
+    meter.create_observable_gauge("main_app.node_temperature_celsius", callbacks=[cb_temp])
+    meter.create_observable_gauge("main_app.node_load_pct", callbacks=[cb_node_load_pct])
+    meter.create_observable_gauge("main_app.node_load1", callbacks=[cb_node_load1])
+    meter.create_observable_gauge("main_app.node_load5", callbacks=[cb_node_load5])
+    meter.create_observable_gauge("main_app.qos", callbacks=[cb_qos])
+    meter.create_observable_gauge("main_app.qos_signal_load", callbacks=[cb_qos_load])
+    meter.create_observable_gauge("main_app.qos_signal_iters", callbacks=[cb_qos_iters])
+    meter.create_observable_gauge("main_app.is_calibrating", callbacks=[cb_calibrating])
+    meter.create_observable_gauge("main_app.baseline_iters_per_sec", callbacks=[cb_baseline])
 
     print("[INFO]  [main] Métricas registradas.", flush=True)
 
-    # 3) Threads de sensores
+    # 4) Threads de sensores
     threading.Thread(target=track_cpu,         daemon=True).start()
     threading.Thread(target=track_temperature, daemon=True).start()
     threading.Thread(target=track_node_load,   daemon=True).start()
