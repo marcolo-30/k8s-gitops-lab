@@ -17,7 +17,7 @@ spec:
         kubernetes.io/hostname: r3-node # Make sure this is the correct node
       containers:
         - name: main-app
-          image: ghcr.io/marcolo-30/k8s-gitops-lab:79be90fd2a97633341411c5741102dc1b7138b42
+          image: ghcr.io/marcolo-30/k8s-gitops-lab:81062490e834ae8d98777bfb374436f351549ff4
           imagePullPolicy: Always
           ports: # Expose the health check port
             - containerPort: 8080
