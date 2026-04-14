@@ -14,52 +14,28 @@ spec:
         app: main-app
     spec:
       nodeSelector:
-        kubernetes.io/hostname: r3-node
+        kubernetes.io/hostname: r3-node # Make sure this is the correct node
       containers:
         - name: main-app
-          image: ghcr.io/marcolo-30/k8s-gitops-lab:752b7a2376811efd65d61208c920a17113673526
+          image: ghcr.io/marcolo-30/k8s-gitops-lab:latest
           imagePullPolicy: Always
+          ports: # Expose the health check port
+            - containerPort: 8080
+              name: http-health
           env:
             - name: SERVICE_NAME
               value: "main-app"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://10.43.138.250:4318"
             - name: WORKLOAD_SIZE
-              value: "80000"
+              value: "200000"
             - name: NUM_WORKERS
-              value: "1"
-            - name: CALIBRATION_SECONDS
-              value: "30"
-            # --- QoS load-based signal (replaces throttle) ---
-            - name: QOS_LOAD_THRESHOLD   # node load% where QoS starts degrading
-              value: "70"
-            - name: QOS_FLOOR            # minimum QoS when node is at 100% load
-              value: "5"
-            - name: QOS_WEIGHT_LOAD      # weight for node load signal (was QOS_WEIGHT_THROTTLE)
-              value: "0.70"
-            - name: QOS_WEIGHT_ITERS
-              value: "0.30"
-            - name: EMA_ALPHA
-              value: "0.15"
-            - name: POD_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
+              value: "3"
+            - name: QOS_CPU_HEALTHY_THRESHOLD
+              value: "70.0"
+            - name: QOS_CPU_CRITICAL_THRESHOLD
+              value: "20.0"
           resources:
             requests:
-              cpu: "100m"      # keep for scheduling purposes
+              cpu: "100m"
               memory: "128Mi"
-            limits:
-              memory: "256Mi"  # always keep memory limit
-              # NO limits.cpu — removed intentionally to eliminate throttling
-          volumeMounts:
-            - name: sys-thermal
-              mountPath: /sys/class/thermal
-              readOnly: true
-            # cgroup volume removed — no longer needed without limits.cpu
-      volumes:
-        - name: sys-thermal
-          hostPath:
-            path: /sys/class/thermal
-            type: Directory
-        # cgroup-unified volume removed — track_throttle() replaced by track_node_load()
