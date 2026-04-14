@@ -30,7 +30,7 @@ spec:
             - name: WORKLOAD_SIZE
               value: "200000"
             - name: NUM_WORKERS
-              value: "3"
+              value: "1"
             - name: QOS_CPU_HEALTHY_THRESHOLD
               value: "70.0"
             - name: QOS_CPU_CRITICAL_THRESHOLD
