@@ -14,7 +14,7 @@ from opentelemetry import metrics
 from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 from opentelemetry.metrics import CallbackOptions, Observation
 from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader, MetricExportResult
 from opentelemetry.sdk.resources import Resource
 
 # --- Configuration ---
@@ -27,8 +27,25 @@ HEALTH_PORT = 8080
 print(f"[INFO]  [startup] service={SERVICE_NAME}, workers={NUM_WORKERS}, health_port={HEALTH_PORT}")
 
 # --- OTEL Setup ---
+inner_exporter = OTLPMetricExporter(endpoint=f"{OTEL_ENDPOINT}/v1/metrics")
+_original_export = inner_exporter.export
+
+def _logged_export(metrics_data, timeout_millis=10000, **kwargs):
+    try:
+        result = _original_export(metrics_data, timeout_millis=timeout_millis, **kwargs)
+        if result == MetricExportResult.SUCCESS:
+            print(f"[INFO]  [otel-export] Push OK -> {OTEL_ENDPOINT}/v1/metrics")
+        else:
+            print(f"[ERROR] [otel-export] Push FAILED -> {OTEL_ENDPOINT}/v1/metrics")
+        return result
+    except Exception as e:
+        print(f"[ERROR] [otel-export] Push EXCEPTION -> {e}")
+        return MetricExportResult.FAILURE
+
+inner_exporter.export = _logged_export
+
 resource = Resource(attributes={"service.name": SERVICE_NAME})
-reader = PeriodicExportingMetricReader(OTLPMetricExporter(endpoint=f"{OTEL_ENDPOINT}/v1/metrics"), export_interval_millis=2000)
+reader = PeriodicExportingMetricReader(inner_exporter, export_interval_millis=2000)
 meter_provider = MeterProvider(resource=resource, metric_readers=[reader])
 metrics.set_meter_provider(meter_provider)
 meter = metrics.get_meter("main-app.meter")
