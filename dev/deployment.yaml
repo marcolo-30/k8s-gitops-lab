@@ -14,12 +14,12 @@ spec:
         app: main-app
     spec:
       nodeSelector:
-        kubernetes.io/hostname: r3-node # Make sure this is the correct node
+        kubernetes.io/hostname: r3-node
       containers:
         - name: main-app
-          image: ghcr.io/marcolo-30/k8s-gitops-lab:81062490e834ae8d98777bfb374436f351549ff4
+          image: ghcr.io/marcolo-30/k8s-gitops-lab:latest
           imagePullPolicy: Always
-          ports: # Expose the health check port
+          ports:
             - containerPort: 8080
               name: http-health
           env:
@@ -28,14 +28,37 @@ spec:
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://10.43.138.250:4318"
             - name: WORKLOAD_SIZE
-              value: "200000"
+              value: "80000"
             - name: NUM_WORKERS
               value: "1"
-            - name: QOS_CPU_HEALTHY_THRESHOLD
-              value: "70.0"
-            - name: QOS_CPU_CRITICAL_THRESHOLD
-              value: "20.0"
+            - name: CALIBRATION_SECONDS
+              value: "30"
+            - name: QOS_LOAD_THRESHOLD
+              value: "70"
+            - name: QOS_FLOOR
+              value: "5"
+            - name: QOS_WEIGHT_LOAD
+              value: "0.70"
+            - name: QOS_WEIGHT_ITERS
+              value: "0.30"
+            - name: EMA_ALPHA
+              value: "0.15"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
           resources:
             requests:
               cpu: "100m"
               memory: "128Mi"
+            limits:
+              memory: "256Mi"
+          volumeMounts:
+            - name: sys-thermal
+              mountPath: /sys/class/thermal
+              readOnly: true
+      volumes:
+        - name: sys-thermal
+          hostPath:
+            path: /sys/class/thermal
+            type: Directory

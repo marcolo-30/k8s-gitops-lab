@@ -11,4 +11,4 @@ spec:
     - protocol: TCP
       port: 8080 # Port inside the cluster
       targetPort: 8080 # Port on the pod (must match containerPort)
-      nodePort: 30007 # Optional: you can specify a port, or let Kubernetes choose one
+      nodePort: 30007 # Statically assigning the NodePort
