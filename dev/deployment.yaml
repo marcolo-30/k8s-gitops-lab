@@ -1,64 +1,51 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: main-app
+  name: image-processor
   namespace: myapp
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: main-app
+      app: image-processor
   template:
     metadata:
       labels:
-        app: main-app
+        app: image-processor
     spec:
       nodeSelector:
         kubernetes.io/hostname: r3-node
       containers:
-        - name: main-app
-          image: ghcr.io/marcolo-30/k8s-gitops-lab:1af80080946e1304818b23d8c1a04de3aec351cb
-          imagePullPolicy: Always
-          ports:
-            - containerPort: 8080
-              name: http-health
-          env:
-            - name: SERVICE_NAME
-              value: "main-app"
-            - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: "http://10.43.138.250:4318"
-            - name: WORKLOAD_SIZE
-              value: "80000"
-            - name: NUM_WORKERS
-              value: "1"
-            - name: CALIBRATION_SECONDS
-              value: "30"
-            - name: QOS_LOAD_THRESHOLD
-              value: "70"
-            - name: QOS_FLOOR
-              value: "5"
-            - name: QOS_WEIGHT_LOAD
-              value: "0.70"
-            - name: QOS_WEIGHT_ITERS
-              value: "0.30"
-            - name: EMA_ALPHA
-              value: "0.15"
-            - name: POD_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
-          resources:
-            requests:
-              cpu: "100m"
-              memory: "128Mi"
-            limits:
-              memory: "256Mi"
-          volumeMounts:
-            - name: sys-thermal
-              mountPath: /sys/class/thermal
-              readOnly: true
-      volumes:
-        - name: sys-thermal
-          hostPath:
-            path: /sys/class/thermal
-            type: Directory
+      # --- Contenedor 1: El Servidor (image-processor) ---
+      - name: image-processor-container
+        image: ghcr.io/marcolo-30/k8s-gitops-lab:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http-api
+        env:
+        - name: SERVICE_NAME
+          value: "image-processor"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://otel-collector.observability.svc.cluster.local:4318"
+        - name: WORKLOAD_SIZE
+          value: "2000000"
+        - name: LATENCY_HEALTHY_SECONDS
+          value: "2.0"
+        - name: LATENCY_CRITICAL_SECONDS
+          value: "10.0"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "64Mi"
+
+      # --- Contenedor 2: El Cliente (api-client) ---
+      - name: client-container
+        image: ghcr.io/marcolo-30/k8s-gitops-lab:latest # Usa la misma imagen
+        imagePullPolicy: Always
+        # Sobrescribe el comando por defecto del Dockerfile para ejecutar el cliente
+        command: ["python", "app/client.py"]
+        env:
+        - name: SERVICE_ENDPOINT
+          # Se comunica por localhost porque están en el mismo pod
+          value: "http://localhost:8080"
