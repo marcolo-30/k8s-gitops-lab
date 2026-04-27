@@ -41,11 +41,15 @@ spec:
 
       # --- Contenedor 2: El Cliente (api-client) ---
       - name: client-container
-        image: ghcr.io/marcolo-30/k8s-gitops-lab:latest # Usa la misma imagen
+        image: ghcr.io/marcolo-30/k8s-gitops-lab:latest
         imagePullPolicy: Always
-        # Sobrescribe el comando por defecto del Dockerfile para ejecutar el cliente
         command: ["python", "app/client.py"]
         env:
+        # Env var para que el cliente sepa dónde está el servidor
         - name: SERVICE_ENDPOINT
-          # Se comunica por localhost porque están en el mismo pod
           value: "http://localhost:8080"
+        # Env vars para que el cliente pueda exportar sus propias métricas
+        - name: SERVICE_NAME
+          value: "api-client"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://otel-collector.observability.svc.cluster.local:4318"
