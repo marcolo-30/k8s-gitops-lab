@@ -44,14 +44,18 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
-      - name: Update image tag in dev/deployment.yaml
+      - name: Update image tag in dev/deployment.yaml (server)
         run: |
           sed -i "s|${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:.*|${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}|g" dev/deployment.yaml
 
-      - name: Commit new tag
+      - name: Update image tag in dev/client-deployment.yaml (client)
+        run: |
+          sed -i "s|${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:.*|${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}|g" dev/client-deployment.yaml
+
+      - name: Commit new tags
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add dev/deployment.yaml
+          git add dev/deployment.yaml dev/client-deployment.yaml
           git commit -m "ci: update image tag to ${{ github.sha }} [skip ci]"
           git push
