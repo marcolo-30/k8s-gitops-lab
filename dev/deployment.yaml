@@ -16,7 +16,6 @@ spec:
       nodeSelector:
         kubernetes.io/hostname: r3-node
       containers:
-      # --- Contenedor 1: El Servidor (image-processor) ---
       - name: image-processor-container
         image: ghcr.io/marcolo-30/k8s-gitops-lab:85db1c055819af678f107ce0024de6eaebf418f9
         imagePullPolicy: Always
@@ -30,9 +29,8 @@ spec:
           value: "http://otel-collector.observability.svc.cluster.local:4318"
         - name: WORKLOAD_SIZE
           value: "2000000"
-        # --- Umbrales Calibrados para un QoS de 100 ---
         - name: LATENCY_HEALTHY_SECONDS
-          value: "4.0" # <-- Ajustado para que ~3.65s sea 100% QoS
+          value: "4.0"
         - name: LATENCY_CRITICAL_SECONDS
           value: "10.0"
         resources:

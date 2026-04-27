@@ -14,20 +14,18 @@ spec:
         app: api-client
     spec:
       nodeSelector:
-        kubernetes.io/hostname: r3-node
+        kubernetes.io/hostname: r3-node # Deploy client on the same node
       containers:
       - name: client-container
         image: ghcr.io/marcolo-30/k8s-gitops-lab:85db1c055819af678f107ce0024de6eaebf418f9
         imagePullPolicy: Always
-        command: ["python", "client.py"]
+        command: ["python", "app/client.py"]
         env:
+        # The client finds the server using the internal Kubernetes DNS name
         - name: SERVICE_ENDPOINT
-          value: "http://image-processor:8080"
+          value: "http://image-processor-svc:8080"
+        # Env vars for the client to push its own metrics
         - name: SERVICE_NAME
           value: "api-client"
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
           value: "http://otel-collector.observability.svc.cluster.local:4318"
-        resources:
-          requests:
-            cpu: "100m"
-            memory: "64Mi"
