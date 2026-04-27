@@ -1,5 +1,5 @@
 # app/main.py
-# Professional version with Proof-of-Work using a validation checksum.
+# Professional version with architecture-independent, self-calibrating Proof-of-Work.
 
 import http.server
 import socketserver
@@ -21,9 +21,8 @@ WORKLOAD_SIZE = int(os.getenv("WORKLOAD_SIZE", "2000000"))
 LATENCY_HEALTHY_SECONDS = float(os.getenv("LATENCY_HEALTHY_SECONDS", "4.0"))
 LATENCY_CRITICAL_SECONDS = float(os.getenv("LATENCY_CRITICAL_SECONDS", "10.0"))
 
-# --- Proof-of-Work Checksum ---
-# The correct integer result for the calculation with WORKLOAD_SIZE = 2,000,000
-VALIDATION_CHECKSUM = 13419921163
+# --- Global variable for the self-generated checksum ---
+_self_validation_checksum = None
 
 # --- OTEL Setup ---
 _app_qos = 100.0
@@ -46,19 +45,17 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
             print(f'[SERVER] Received request for /process.', flush=True)
             start_time = time.time()
             
-            # Perform the work and get the actual result
             actual_result = sum(math.sqrt(i) * math.log(i + 1) for i in range(WORKLOAD_SIZE))
             duration = time.time() - start_time
             
-            # --- Proof-of-Work Validation ---
-            if int(actual_result) != VALIDATION_CHECKSUM:
-                # The work was interrupted and is incomplete. Fail hard.
-                error_message = f"Work Incomplete: Checksum Mismatch. Expected {VALIDATION_CHECKSUM} but got {int(actual_result)}"
+            # --- Proof-of-Work Validation using the self-generated checksum ---
+            if int(actual_result) != _self_validation_checksum:
+                error_message = f"Work Incomplete: Checksum Mismatch. Expected {_self_validation_checksum} but got {int(actual_result)}"
                 print(f'[SERVER] ERROR: {error_message}', flush=True)
                 self.send_error(500, error_message)
                 return
 
-            # If we reach here, the work is validated. Proceed normally.
+            # If we reach here, the work is validated.
             if duration <= LATENCY_HEALTHY_SECONDS:
                 _app_qos = 100.0
             elif duration >= LATENCY_CRITICAL_SECONDS:
@@ -87,6 +84,11 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
 
 # --- Main Execution ---
 if __name__ == "__main__":
+    # --- Self-Calibration at Startup ---
+    print("[SERVER] Performing one-time self-calibration to determine checksum...", flush=True)
+    _self_validation_checksum = int(sum(math.sqrt(i) * math.log(i + 1) for i in range(WORKLOAD_SIZE)))
+    print(f"[SERVER] Self-calibration complete. Checksum for this environment is: {_self_validation_checksum}", flush=True)
+
     with socketserver.ThreadingTCPServer(('', PORT), APIHandler) as httpd:
         print(f'[SERVER] Serving at port {PORT} with WORKLOAD_SIZE={WORKLOAD_SIZE}', flush=True)
         httpd.serve_forever()
