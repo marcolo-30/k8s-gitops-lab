@@ -16,8 +16,9 @@ spec:
       nodeSelector:
         kubernetes.io/hostname: r3-node
       containers:
+      # --- Contenedor 1: El Servidor (image-processor) ---
       - name: image-processor-container
-        image: ghcr.io/marcolo-30/k8s-gitops-lab:54974266c8130354f82b65fd0e8f0f4e91b3ebd0
+        image: ghcr.io/marcolo-30/k8s-gitops-lab:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
@@ -29,11 +30,25 @@ spec:
           value: "http://otel-collector.observability.svc.cluster.local:4318"
         - name: WORKLOAD_SIZE
           value: "2000000"
+        # --- Umbrales Calibrados para un QoS de 100 ---
         - name: LATENCY_HEALTHY_SECONDS
-          value: "2.0"
+          value: "4.0" # <-- Ajustado para que ~3.65s sea 100% QoS
         - name: LATENCY_CRITICAL_SECONDS
           value: "10.0"
         resources:
           requests:
             cpu: "100m"
             memory: "64Mi"
+
+      # --- Contenedor 2: El Cliente (api-client) ---
+      - name: client-container
+        image: ghcr.io/marcolo-30/k8s-gitops-lab:latest
+        imagePullPolicy: Always
+        command: ["python", "app/client.py"]
+        env:
+        - name: SERVICE_ENDPOINT
+          value: "http://localhost:8080"
+        - name: SERVICE_NAME
+          value: "api-client"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://otel-collector.observability.svc.cluster.local:4318"
