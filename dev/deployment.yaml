@@ -18,11 +18,7 @@ spec:
         kubernetes.io/hostname: r3-node
       containers:
       - name: image-processor-container
-<<<<<<< Updated upstream
-        image: ghcr.io/marcolo-30/k8s-gitops-lab:23ae8360d57e3f79aca4d93f375b2007ae74d67a
-=======
-        image: ghcr.io/marcolo-30/k8s-gitops-lab:23ae8360d57e3f79aca4d93f375b2007ae74d67a
->>>>>>> Stashed changes
+        image: ghcr.io/marcolo-30/k8s-gitops-lab:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
@@ -45,8 +41,6 @@ spec:
           value: "4.0"
         - name: LATENCY_CRITICAL_SECONDS
           value: "10.0"
-        - name: MIN_REALISTIC_DURATION
-          value: "1.0" # Tasks shorter than 1s are considered errors
         resources:
           requests:
             cpu: "100m"

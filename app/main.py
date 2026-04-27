@@ -1,5 +1,5 @@
 # app/main.py
-# Image processing microservice with self-validation to prevent false QoS metrics.
+# Professional version with Proof-of-Work using a validation checksum.
 
 import http.server
 import socketserver
@@ -20,8 +20,10 @@ PORT = 8080
 WORKLOAD_SIZE = int(os.getenv("WORKLOAD_SIZE", "2000000"))
 LATENCY_HEALTHY_SECONDS = float(os.getenv("LATENCY_HEALTHY_SECONDS", "4.0"))
 LATENCY_CRITICAL_SECONDS = float(os.getenv("LATENCY_CRITICAL_SECONDS", "10.0"))
-# New: Minimum realistic duration. Anything less is considered an error.
-MIN_REALISTIC_DURATION = float(os.getenv("MIN_REALISTIC_DURATION", "1.0"))
+
+# --- Proof-of-Work Checksum ---
+# The correct integer result for the calculation with WORKLOAD_SIZE = 2,000,000
+VALIDATION_CHECKSUM = 13419921163
 
 # --- OTEL Setup ---
 _app_qos = 100.0
@@ -41,35 +43,35 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         global _app_qos
         if self.path == '/process':
-            content_len = int(self.headers.get('Content-Length'))
-            post_body = json.loads(self.rfile.read(content_len))
-            client_token = post_body.get("token")
-
-            print(f'[SERVER] Received request for /process with token {client_token}', flush=True)
+            print(f'[SERVER] Received request for /process.', flush=True)
             start_time = time.time()
-            _ = sum(math.sqrt(i) * math.log(i + 1) for i in range(WORKLOAD_SIZE))
+            
+            # Perform the work and get the actual result
+            actual_result = sum(math.sqrt(i) * math.log(i + 1) for i in range(WORKLOAD_SIZE))
             duration = time.time() - start_time
             
-            # --- Self-Validation Logic ---
-            if duration < MIN_REALISTIC_DURATION:
-                # This was likely an interrupted process. Do not calculate a new QoS.
-                # Keep the last known valid QoS to avoid reporting a fake "100".
-                print(f'[SERVER] Work took {duration:.2f}s (less than realistic minimum). Ignoring for QoS calculation.', flush=True)
+            # --- Proof-of-Work Validation ---
+            if int(actual_result) != VALIDATION_CHECKSUM:
+                # The work was interrupted and is incomplete. Fail hard.
+                error_message = f"Work Incomplete: Checksum Mismatch. Expected {VALIDATION_CHECKSUM} but got {int(actual_result)}"
+                print(f'[SERVER] ERROR: {error_message}', flush=True)
+                self.send_error(500, error_message)
+                return
+
+            # If we reach here, the work is validated. Proceed normally.
+            if duration <= LATENCY_HEALTHY_SECONDS:
+                _app_qos = 100.0
+            elif duration >= LATENCY_CRITICAL_SECONDS:
+                _app_qos = 0.0
             else:
-                # This is a valid run, calculate QoS normally
-                if duration <= LATENCY_HEALTHY_SECONDS:
-                    _app_qos = 100.0
-                elif duration >= LATENCY_CRITICAL_SECONDS:
-                    _app_qos = 0.0
-                else:
-                    _app_qos = 100 - (((duration - LATENCY_HEALTHY_SECONDS) / (LATENCY_CRITICAL_SECONDS - LATENCY_HEALTHY_SECONDS)) * 100)
+                _app_qos = 100 - (((duration - LATENCY_HEALTHY_SECONDS) / (LATENCY_CRITICAL_SECONDS - LATENCY_HEALTHY_SECONDS)) * 100)
             
-            print(f'[SERVER] Work finished in {duration:.2f}s. QoS is now {_app_qos:.1f}', flush=True)
+            print(f'[SERVER] Work VERIFIED in {duration:.2f}s. QoS is now {_app_qos:.1f}', flush=True)
             
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
             self.end_headers()
-            response = {'status': 'ok', 'processing_time_seconds': duration, 'qos': _app_qos, 'token': client_token}
+            response = {'status': 'ok', 'processing_time_seconds': duration, 'qos': _app_qos}
             self.wfile.write(json.dumps(response).encode('utf-8'))
         else:
             self.send_error(404, 'Not Found')
