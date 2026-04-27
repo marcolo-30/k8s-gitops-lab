@@ -18,7 +18,7 @@ spec:
       containers:
       # --- Contenedor 1: El Servidor (image-processor) ---
       - name: image-processor-container
-        image: ghcr.io/marcolo-30/k8s-gitops-lab:latest
+        image: ghcr.io/marcolo-30/k8s-gitops-lab:484470d50b92ce16e33099046b66b57c947eeac5
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
@@ -41,7 +41,7 @@ spec:
 
       # --- Contenedor 2: El Cliente (api-client) ---
       - name: client-container
-        image: ghcr.io/marcolo-30/k8s-gitops-lab:latest
+        image: ghcr.io/marcolo-30/k8s-gitops-lab:484470d50b92ce16e33099046b66b57c947eeac5
         imagePullPolicy: Always
         command: ["python", "app/client.py"]
         env:
