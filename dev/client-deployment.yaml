@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-client
+  namespace: myapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-client
+  template:
+    metadata:
+      labels:
+        app: api-client
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: r3-node
+      containers:
+      - name: client-container
+        image: ghcr.io/marcolo-30/k8s-gitops-lab:latest
+        imagePullPolicy: Always
+        command: ["python", "client.py"]
+        env:
+        - name: SERVICE_ENDPOINT
+          value: "http://image-processor:8080"
+        - name: SERVICE_NAME
+          value: "api-client"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://otel-collector.observability.svc.cluster.local:4318"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "64Mi"
