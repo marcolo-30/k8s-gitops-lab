@@ -56,7 +56,7 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                 # Keep the last known valid QoS to avoid reporting a fake "100".
                 print(f'[SERVER] Work took {duration:.2f}s (less than realistic minimum). Ignoring for QoS calculation.', flush=True)
             else:
-                # Calculate QoS normally
+                # This is a valid run, calculate QoS normally
                 if duration <= LATENCY_HEALTHY_SECONDS:
                     _app_qos = 100.0
                 elif duration >= LATENCY_CRITICAL_SECONDS:
@@ -82,7 +82,6 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(b'{\"status\": \"ok\"}')
         else:
             self.send_error(404, 'Not Found')
-
 
 # --- Main Execution ---
 if __name__ == "__main__":
