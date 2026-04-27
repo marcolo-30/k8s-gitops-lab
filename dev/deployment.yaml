@@ -18,7 +18,7 @@ spec:
         kubernetes.io/hostname: r3-node
       containers:
       - name: image-processor-container
-        image: ghcr.io/marcolo-30/k8s-gitops-lab:latest
+        image: ghcr.io/marcolo-30/k8s-gitops-lab:3a65a91c475741c403f5c32c497750de9abeacf3
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
