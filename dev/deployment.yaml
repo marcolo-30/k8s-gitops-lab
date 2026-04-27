@@ -17,7 +17,7 @@ spec:
         kubernetes.io/hostname: r3-node
       containers:
       - name: image-processor-container
-        image: ghcr.io/marcolo-30/k8s-gitops-lab:85db1c055819af678f107ce0024de6eaebf418f9
+        image: ghcr.io/marcolo-30/k8s-gitops-lab:bd97f23fe815548740bf04fae88cf7317c397e9a
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
@@ -40,7 +40,7 @@ spec:
 
       # --- Contenedor 2: El Cliente (api-client) ---
       - name: client-container
-        image: ghcr.io/marcolo-30/k8s-gitops-lab:85db1c055819af678f107ce0024de6eaebf418f9
+        image: ghcr.io/marcolo-30/k8s-gitops-lab:bd97f23fe815548740bf04fae88cf7317c397e9a
         imagePullPolicy: Always
         command: ["python", "app/client.py"]
         env:
