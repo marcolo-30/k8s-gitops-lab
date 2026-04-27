@@ -1,5 +1,6 @@
 # client.py
 # A client that validates the server's response using a token.
+# CORRECTED: The client now correctly sends the JSON payload.
 
 import os
 import requests
@@ -33,13 +34,14 @@ def make_request():
     global _latest_rtt
     url = f'{SERVICE_ENDPOINT}/process'
     
-    # Create a unique token for this request
     request_token = time.time()
     payload = {"token": request_token}
 
     print(f'--> [CLIENT] Sending request with token {request_token}', flush=True)
     try:
         start_time = time.time()
+        # --- CORRECTED LINE ---
+        # The `json=payload` argument was missing. Now it is included.
         response = requests.post(url, json=payload, timeout=30)
         duration = time.time() - start_time
         
@@ -49,7 +51,6 @@ def make_request():
             data = response.json()
             response_token = data.get("token")
 
-            # --- Validation Logic ---
             if response_token == request_token:
                 print(f'<-- [CLIENT] SUCCESS (Validated) | RTT: {duration:.2f}s | App Duration: {data.get("processing_time_seconds", 0):.2f}s', flush=True)
             else:

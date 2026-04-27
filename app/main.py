@@ -83,6 +83,7 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
         else:
             self.send_error(404, 'Not Found')
 
+
 # --- Main Execution ---
 if __name__ == "__main__":
     with socketserver.ThreadingTCPServer(('', PORT), APIHandler) as httpd:
