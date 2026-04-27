@@ -1,3 +1,4 @@
+# dev/deployment.yaml - SERVER ONLY
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -11,13 +12,13 @@ spec:
   template:
     metadata:
       labels:
-        app: image-processor
+        app: image-processor # The service will look for this label
     spec:
       nodeSelector:
         kubernetes.io/hostname: r3-node
       containers:
       - name: image-processor-container
-        image: ghcr.io/marcolo-30/k8s-gitops-lab:5082fbf58fac0adfd9476b4d12eabffaf871626d
+        image: ghcr.io/marcolo-30/k8s-gitops-lab:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
@@ -37,16 +38,3 @@ spec:
           requests:
             cpu: "100m"
             memory: "64Mi"
-
-      # --- Contenedor 2: El Cliente (api-client) ---
-      - name: client-container
-        image: ghcr.io/marcolo-30/k8s-gitops-lab:5082fbf58fac0adfd9476b4d12eabffaf871626d
-        imagePullPolicy: Always
-        command: ["python", "app/client.py"]
-        env:
-        - name: SERVICE_ENDPOINT
-          value: "http://localhost:8080"
-        - name: SERVICE_NAME
-          value: "api-client"
-        - name: OTEL_EXPORTER_OTLP_ENDPOINT
-          value: "http://otel-collector.observability.svc.cluster.local:4318"

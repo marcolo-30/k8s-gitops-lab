@@ -1,11 +1,14 @@
+# dev/service.yaml
 apiVersion: v1
 kind: Service
 metadata:
-  name: image-processor
+  # This name MUST match what the client is trying to resolve
+  name: image-processor-svc
   namespace: myapp
 spec:
   type: NodePort
   selector:
+    # This selector MUST match the labels on the server's pod template
     app: image-processor
   ports:
   - protocol: TCP

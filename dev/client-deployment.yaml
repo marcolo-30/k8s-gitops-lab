@@ -1,3 +1,4 @@
+# dev/client-deployment.yaml - CLIENT ONLY
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,11 +18,12 @@ spec:
         kubernetes.io/hostname: r3-node
       containers:
       - name: client-container
-        image: ghcr.io/marcolo-30/k8s-gitops-lab:5082fbf58fac0adfd9476b4d12eabffaf871626d
+        image: ghcr.io/marcolo-30/k8s-gitops-lab:latest
         imagePullPolicy: Always
-        # Assuming WORKDIR is /app, this will execute /app/client.py
+        # Assuming WORKDIR in Dockerfile is /app, this executes /app/client.py
         command: ["python", "client.py"]
         env:
+        # The client finds the server using the correct internal Kubernetes DNS name
         - name: SERVICE_ENDPOINT
           value: "http://image-processor-svc:8080"
         - name: SERVICE_NAME
