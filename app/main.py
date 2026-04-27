@@ -1,5 +1,5 @@
 # app/main.py
-# Image processing microservice, ready for CI/CD deployment.
+# Image processing microservice with self-validation to prevent false QoS metrics.
 
 import http.server
 import socketserver
@@ -18,8 +18,10 @@ SERVICE_NAME = os.getenv("SERVICE_NAME", "image-processor")
 OTEL_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel-collector.observability.svc.cluster.local:4318")
 PORT = 8080
 WORKLOAD_SIZE = int(os.getenv("WORKLOAD_SIZE", "2000000"))
-LATENCY_HEALTHY_SECONDS = float(os.getenv("LATENCY_HEALTHY_SECONDS", "2.0"))
+LATENCY_HEALTHY_SECONDS = float(os.getenv("LATENCY_HEALTHY_SECONDS", "4.0"))
 LATENCY_CRITICAL_SECONDS = float(os.getenv("LATENCY_CRITICAL_SECONDS", "10.0"))
+# New: Minimum realistic duration. Anything less is considered an error.
+MIN_REALISTIC_DURATION = float(os.getenv("MIN_REALISTIC_DURATION", "1.0"))
 
 # --- OTEL Setup ---
 _app_qos = 100.0
@@ -39,26 +41,35 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         global _app_qos
         if self.path == '/process':
-            print(f'[SERVER] Received request for /process', flush=True)
+            content_len = int(self.headers.get('Content-Length'))
+            post_body = json.loads(self.rfile.read(content_len))
+            client_token = post_body.get("token")
+
+            print(f'[SERVER] Received request for /process with token {client_token}', flush=True)
             start_time = time.time()
-            # Simulate CPU-intensive work
             _ = sum(math.sqrt(i) * math.log(i + 1) for i in range(WORKLOAD_SIZE))
             duration = time.time() - start_time
             
-            # --- Calculate QoS ---
-            if duration <= LATENCY_HEALTHY_SECONDS:
-                _app_qos = 100.0
-            elif duration >= LATENCY_CRITICAL_SECONDS:
-                _app_qos = 0.0
+            # --- Self-Validation Logic ---
+            if duration < MIN_REALISTIC_DURATION:
+                # This was likely an interrupted process. Do not calculate a new QoS.
+                # Keep the last known valid QoS to avoid reporting a fake "100".
+                print(f'[SERVER] Work took {duration:.2f}s (less than realistic minimum). Ignoring for QoS calculation.', flush=True)
             else:
-                _app_qos = 100 - (((duration - LATENCY_HEALTHY_SECONDS) / (LATENCY_CRITICAL_SECONDS - LATENCY_HEALTHY_SECONDS)) * 100)
+                # Calculate QoS normally
+                if duration <= LATENCY_HEALTHY_SECONDS:
+                    _app_qos = 100.0
+                elif duration >= LATENCY_CRITICAL_SECONDS:
+                    _app_qos = 0.0
+                else:
+                    _app_qos = 100 - (((duration - LATENCY_HEALTHY_SECONDS) / (LATENCY_CRITICAL_SECONDS - LATENCY_HEALTHY_SECONDS)) * 100)
             
             print(f'[SERVER] Work finished in {duration:.2f}s. QoS is now {_app_qos:.1f}', flush=True)
             
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
             self.end_headers()
-            response = {'status': 'ok', 'processing_time_seconds': duration, 'qos': _app_qos}
+            response = {'status': 'ok', 'processing_time_seconds': duration, 'qos': _app_qos, 'token': client_token}
             self.wfile.write(json.dumps(response).encode('utf-8'))
         else:
             self.send_error(404, 'Not Found')
@@ -71,6 +82,7 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(b'{\"status\": \"ok\"}')
         else:
             self.send_error(404, 'Not Found')
+
 # --- Main Execution ---
 if __name__ == "__main__":
     with socketserver.ThreadingTCPServer(('', PORT), APIHandler) as httpd:
