@@ -18,7 +18,7 @@ spec:
         kubernetes.io/hostname: r3-node
       containers:
       - name: client-container
-        image: ghcr.io/marcolo-30/k8s-gitops-lab:e12dabb4a27ac2e99ccf416333e5b173e087c943
+        image: ghcr.io/marcolo-30/k8s-gitops-lab:0bd37c8a57fb91ac23ad008201f5a3f4b2df8002
         imagePullPolicy: Always
         # Assuming WORKDIR in Dockerfile is /app, this executes /app/client.py
         command: ["python", "client.py"]
