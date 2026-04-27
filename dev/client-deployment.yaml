@@ -17,7 +17,7 @@ spec:
         kubernetes.io/hostname: r3-node
       containers:
       - name: client-container
-        image: ghcr.io/marcolo-30/k8s-gitops-lab:latest
+        image: ghcr.io/marcolo-30/k8s-gitops-lab:85db1c055819af678f107ce0024de6eaebf418f9
         imagePullPolicy: Always
         command: ["python", "client.py"]
         env:
