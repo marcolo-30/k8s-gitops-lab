@@ -19,9 +19,9 @@ spec:
       containers:
       - name: image-processor-container
 <<<<<<< Updated upstream
-        image: ghcr.io/marcolo-30/k8s-gitops-lab:5116543df8822fb1cd9a25c74c27c7be7600aab7
+        image: ghcr.io/marcolo-30/k8s-gitops-lab:23ae8360d57e3f79aca4d93f375b2007ae74d67a
 =======
-        image: ghcr.io/marcolo-30/k8s-gitops-lab:latest
+        image: ghcr.io/marcolo-30/k8s-gitops-lab:23ae8360d57e3f79aca4d93f375b2007ae74d67a
 >>>>>>> Stashed changes
         imagePullPolicy: Always
         ports:
