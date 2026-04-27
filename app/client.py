@@ -1,6 +1,5 @@
 # client.py
-# A client that validates the server's response using a token.
-# CORRECTED: The client now correctly sends the JSON payload.
+# A resilient client that calculates and exposes Network & Queuing Time.
 
 import os
 import requests
@@ -16,56 +15,82 @@ from opentelemetry.sdk.resources import Resource
 SERVICE_NAME = os.getenv("SERVICE_NAME", "api-client")
 OTEL_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel-collector.observability.svc.cluster.local:4318")
 SERVICE_ENDPOINT = os.getenv("SERVICE_ENDPOINT", "http://localhost:8080")
+RETRY_DELAY_SECONDS = 2
 
 # --- OTEL Setup ---
 _latest_rtt = 0.0
+_latest_network_time = 0.0 # Variable for the new metric
 resource = Resource(attributes={'service.name': SERVICE_NAME})
 reader = PeriodicExportingMetricReader(OTLPMetricExporter(endpoint=f"{OTEL_ENDPOINT}/v1/metrics"), export_interval_millis=2000)
 meter_provider = MeterProvider(resource=resource, metric_readers=[reader])
 metrics.set_meter_provider(meter_provider)
 meter = metrics.get_meter('api-client.meter')
 
+# --- Métricas del Cliente ---
 def rtt_gauge_callback(options):
     yield metrics.Observation(_latest_rtt, {})
+meter.create_observable_gauge('client_rtt_seconds_gauge', [rtt_gauge_callback], description='The total RTT for a job, including retries.')
 
-meter.create_observable_gauge('client_rtt_seconds_gauge', [rtt_gauge_callback], description='The most recent RTT value.')
+# --- NUEVA MÉTRICA: Network & Queuing Time ---
+def network_time_gauge_callback(options):
+    yield metrics.Observation(_latest_network_time, {})
+meter.create_observable_gauge(
+    name='client_network_and_queue_time_seconds',
+    callbacks=[network_time_gauge_callback],
+    description='Network latency + server queue time (Total RTT - App Duration).'
+)
+print('[CLIENT] All metrics registered.', flush=True)
 
-def make_request():
-    global _latest_rtt
+
+def process_job_with_retries():
+    global _latest_rtt, _latest_network_time
     url = f'{SERVICE_ENDPOINT}/process'
     
     request_token = time.time()
     payload = {"token": request_token}
+    
+    first_attempt_time = time.time()
+    attempts = 0
 
-    print(f'--> [CLIENT] Sending request with token {request_token}', flush=True)
-    try:
-        start_time = time.time()
-        # --- CORRECTED LINE ---
-        # The `json=payload` argument was missing. Now it is included.
-        response = requests.post(url, json=payload, timeout=30)
-        duration = time.time() - start_time
+    print(f'--> [JOB {request_token}] Starting new job.', flush=True)
+
+    while True:
+        attempts += 1
+        print(f'--> [JOB {request_token}] Attempt #{attempts}: Sending request...', flush=True)
         
-        _latest_rtt = duration
+        try:
+            response = requests.post(url, json=payload, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                response_token = data.get("token")
 
-        if response.status_code == 200:
-            data = response.json()
-            response_token = data.get("token")
+                if response_token == request_token:
+                    total_duration = time.time() - first_attempt_time
+                    _latest_rtt = total_duration
+                    
+                    # --- CÁLCULO DEL TIEMPO DE RED Y COLA ---
+                    server_processing_time = data.get("processing_time_seconds", 0)
+                    network_and_queue_time = max(0, total_duration - server_processing_time)
+                    _latest_network_time = network_and_queue_time
 
-            if response_token == request_token:
-                print(f'<-- [CLIENT] SUCCESS (Validated) | RTT: {duration:.2f}s | App Duration: {data.get("processing_time_seconds", 0):.2f}s', flush=True)
+                    print(f'<-- [JOB {request_token}] SUCCESS (Validated) | Total RTT: {total_duration:.2f}s | App Duration: {server_processing_time:.2f}s | Network Time: {network_and_queue_time:.2f}s', flush=True)
+                    return
+                else:
+                    print(f'<-- [JOB {request_token}] FAILED (Token Mismatch) | Retrying in {RETRY_DELAY_SECONDS}s...', flush=True)
             else:
-                print(f'<-- [CLIENT] FAILED (Token Mismatch) | Expected {request_token}, Got {response_token}', flush=True)
-        else:
-            print(f'<-- [CLIENT] FAILED (HTTP Error) | RTT: {duration:.2f}s | Status: {response.status_code}', flush=True)
-    except requests.exceptions.Timeout:
-        _latest_rtt = 30.0
-        print(f'<-- [CLIENT] TIMEOUT after 30s.', flush=True)
-    except requests.exceptions.RequestException as e:
-        _latest_rtt = -1.0
-        print(f'<-- [CLIENT] ERROR: {e}', flush=True)
+                print(f'<-- [JOB {request_token}] FAILED (HTTP {response.status_code}) | Retrying in {RETRY_DELAY_SECONDS}s...', flush=True)
+
+        except requests.exceptions.Timeout:
+            print(f'<-- [JOB {request_token}] TIMEOUT | Retrying in {RETRY_DELAY_SECONDS}s...', flush=True)
+        except requests.exceptions.RequestException:
+            print(f'<-- [JOB {request_token}] CONNECTION ERROR | Retrying in {RETRY_DELAY_SECONDS}s...', flush=True)
+        
+        time.sleep(RETRY_DELAY_SECONDS)
+
 
 if __name__ == "__main__":
-    print(f'[CLIENT] Client started. Targeting: {SERVICE_ENDPOINT}.', flush=True)
+    print(f'[CLIENT] Resilient client started. Targeting: {SERVICE_ENDPOINT}.', flush=True)
     while True:
-        make_request()
-        time.sleep(2)
+        process_job_with_retries()
+        time.sleep(1)
