@@ -14,17 +14,16 @@ spec:
         app: api-client
     spec:
       nodeSelector:
-        kubernetes.io/hostname: r3-node # Deploy client on the same node
+        kubernetes.io/hostname: r3-node
       containers:
       - name: client-container
-        image: ghcr.io/marcolo-30/k8s-gitops-lab:bd97f23fe815548740bf04fae88cf7317c397e9a
+        image: ghcr.io/marcolo-30/k8s-gitops-lab:latest
         imagePullPolicy: Always
-        command: ["python", "app/client.py"]
+        # Assuming WORKDIR is /app, this will execute /app/client.py
+        command: ["python", "client.py"]
         env:
-        # The client finds the server using the internal Kubernetes DNS name
         - name: SERVICE_ENDPOINT
           value: "http://image-processor-svc:8080"
-        # Env vars for the client to push its own metrics
         - name: SERVICE_NAME
           value: "api-client"
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
