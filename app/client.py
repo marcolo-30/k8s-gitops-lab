@@ -53,6 +53,32 @@ job_network_latency_histogram = meter.create_histogram(
 )
 
 # ---------------------------------------------------------------------------
+# Gauge raw values – let Grafana plot the actual value over time
+# ---------------------------------------------------------------------------
+_last_total_time      = 0.0
+_last_network_latency = 0.0
+
+def total_time_callback(options):
+    yield metrics.Observation(_last_total_time, {})
+
+def network_latency_callback(options):
+    yield metrics.Observation(_last_network_latency, {})
+
+meter.create_observable_gauge(
+    "job_total_time_seconds_gauge",
+    [total_time_callback],
+    description="Last observed total job time (raw value, not aggregated).",
+    unit="s",
+)
+
+meter.create_observable_gauge(
+    "job_network_latency_seconds_gauge",
+    [network_latency_callback],
+    description="Last observed network latency (raw value, not aggregated).",
+    unit="s",
+)
+
+# ---------------------------------------------------------------------------
 # Core job loop
 # ---------------------------------------------------------------------------
 def process_one_job():
@@ -84,20 +110,33 @@ def process_one_job():
                 t2   = time.time()
                 data = response.json()
 
-                # Validate the server echoed our token
+                # --- Strict token validation ---
+                # If the returned token doesn't match, this response came from
+                # a ghost execution (old pod dying during migration). Reject it
+                # and retry with the same token.
                 returned_token = data.get("token")
                 if returned_token != token:
-                    print(f"    WARNING: token mismatch! sent={token} got={returned_token}",
-                          flush=True)
+                    print(
+                        f"    WARNING: token mismatch! sent={token[:8]} got={str(returned_token)[:8]} "
+                        f"– likely a ghost response from migrating pod. Retrying...",
+                        flush=True,
+                    )
+                    time.sleep(RETRY_DELAY_SECONDS)
+                    continue
 
                 server_proc_time = float(data.get("processing_time_seconds", 0))
                 total_time       = t2 - first_attempt_time
                 network_latency  = max(0.0, total_time - server_proc_time)
 
                 # --- Publish to OpenTelemetry ---
+                global _last_total_time, _last_network_latency
+                _last_total_time      = total_time
+                _last_network_latency = network_latency
+
                 attrs = {"token": token, "attempts": str(attempts)}
-                job_total_time_histogram.record(total_time,      attrs)
+                job_total_time_histogram.record(total_time,           attrs)
                 job_network_latency_histogram.record(network_latency, attrs)
+                # gauges are pushed automatically by their callbacks
 
                 print(f"<-- SUCCESS: Job confirmed by server.", flush=True)
                 print(f"    Token            : {token}", flush=True)

@@ -36,7 +36,8 @@ _self_validation_checksum = None   # set in __main__ before the server starts
 # ---------------------------------------------------------------------------
 # OpenTelemetry – server side
 # ---------------------------------------------------------------------------
-_app_qos = 100.0
+_app_qos              = 100.0
+_last_processing_time = 0.0   # raw value – updated after each job, read by gauge callback
 
 resource = Resource(attributes={"service.name": SERVICE_NAME})
 reader   = PeriodicExportingMetricReader(
@@ -58,6 +59,17 @@ meter.create_observable_gauge(
     description="QoS derived from processing latency (100 = healthy, 0 = critical).",
 )
 
+# Observable gauge – last raw processing time (lets you see value evolution in Grafana)
+def processing_time_callback(options):
+    yield metrics.Observation(_last_processing_time, {})
+
+meter.create_observable_gauge(
+    "processing_time_seconds_gauge",
+    [processing_time_callback],
+    description="Last observed server processing time (raw value, not aggregated).",
+    unit="s",
+)
+
 # Histogram – server-side processing time per request
 processing_time_histogram = meter.create_histogram(
     name="processing_time_seconds",
@@ -75,7 +87,7 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
         pass
 
     def do_POST(self):
-        global _app_qos
+        global _app_qos, _last_processing_time
 
         if self.path != "/process":
             self.send_error(404, "Not Found")
@@ -89,7 +101,16 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
         except json.JSONDecodeError:
             payload = {}
 
-        token = payload.get("token", "unknown")
+        token = payload.get("token", "").strip()
+
+        # Reject requests with no token – these come from old clients or
+        # bare probes during pod startup. Never process them as "unknown".
+        if not token:
+            print(f"[SERVER] REJECTED: request with missing token (old client or probe).",
+                  flush=True)
+            self.send_error(400, "Missing token: every request must include a UUID token.")
+            return
+
         print(f"[SERVER] /process received  token={token[:8]}...", flush=True)
 
         # --- CPU-bound Proof-of-Work (deterministic; time varies with CPU pressure) ---
@@ -122,7 +143,8 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
         # --- Publish server-side metrics to OTEL ---
         attrs = {"token": token}
         processing_time_histogram.record(duration, attrs)
-        # _app_qos is published via the observable gauge callback automatically
+        _last_processing_time = duration
+        # _app_qos and _last_processing_time are published via observable gauge callbacks
 
         print(
             f"[SERVER] Work VERIFIED  token={token[:8]}...  "
