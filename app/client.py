@@ -22,7 +22,7 @@ SERVICE_ENDPOINT  = os.getenv("SERVICE_ENDPOINT",  "http://localhost:8080")
 OTEL_ENDPOINT     = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT",
                                "http://otel-collector.observability.svc.cluster.local:4318")
 SERVICE_NAME      = os.getenv("SERVICE_NAME", "image-processor-client")
-RETRY_DELAY_SECONDS = 2
+RETRY_DELAY_SECONDS = 1
 REQUEST_TIMEOUT     = 10          # seconds – tune to be > max expected server processing time
 
 # ---------------------------------------------------------------------------
@@ -110,21 +110,31 @@ def process_one_job():
                 t2   = time.time()
                 data = response.json()
 
-                # --- Strict token validation ---
-                # If the returned token doesn't match, this response came from
-                # a ghost execution (old pod dying during migration). Reject it
-                # and retry with the same token.
-                returned_token = data.get("token")
-                if returned_token != token:
+                server_proc_time = float(data.get("processing_time_seconds", 0))
+
+                # --- Sanity check: real jobs take > 1s ---
+                # A sub-second processing_time means we caught a ghost response
+                # from a probe, old pod dying, or pod still warming up.
+                # Reject it and keep retrying with the same token + same clock.
+                if server_proc_time < 1.0:
                     print(
-                        f"    WARNING: token mismatch! sent={token[:8]} got={str(returned_token)[:8]} "
-                        f"– likely a ghost response from migrating pod. Retrying...",
+                        f"    IGNORED: suspiciously fast response "
+                        f"(proc_time={server_proc_time:.3f}s < 1.0s) – "
+                        f"likely ghost/probe. Retrying same token...",
                         flush=True,
                     )
                     time.sleep(RETRY_DELAY_SECONDS)
                     continue
 
-                server_proc_time = float(data.get("processing_time_seconds", 0))
+                returned_token = data.get("token")
+                if returned_token != token:
+                    print(
+                        f"    WARNING: token mismatch! sent={token[:8]} got={str(returned_token)[:8]} "
+                        f"– retrying...",
+                        flush=True,
+                    )
+                    time.sleep(RETRY_DELAY_SECONDS)
+                    continue
                 total_time       = t2 - first_attempt_time
                 network_latency  = max(0.0, total_time - server_proc_time)
 
