@@ -166,6 +166,7 @@ def process():
         _qos_append("error", retries=client_attempt)
         return jsonify({"error": "Image processing failed"}), 500
 
+
 # --- Entry Point ---
 if __name__ == "__main__":
     log.info(f"Starting NAIVE image-processor server on {HOST}:{PORT}")

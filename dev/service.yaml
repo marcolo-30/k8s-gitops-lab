@@ -3,13 +3,13 @@ apiVersion: v1
 kind: Service
 metadata:
   # This name MUST match what the client is trying to resolve
-  name: image-processor-svc
+  name: image-processor-naive-svc
   namespace: myapp
 spec:
   type: NodePort
   selector:
     # This selector MUST match the labels on the server's pod template
-    app: image-processor
+    app: image-processor-naive
   ports:
   - protocol: TCP
     port: 8080
