@@ -18,15 +18,16 @@ spec:
         kubernetes.io/hostname: r3-node
       containers:
       - name: client-container
-        image: ghcr.io/marcolo-30/k8s-gitops-lab:7ed872e89b4be4a642afd5d48672bc227f6f2872
+        image: ghcr.io/marcolo-30/k8s-gitops-lab:latest
         imagePullPolicy: Always
-        # Assuming WORKDIR in Dockerfile is /app, this executes /app/client.py
-        command: ["python", "client.py"]
+        # --- CORRECTED COMMAND ---
+        # Add the --continuous flag to run in a loop.
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          pip install Pillow requests && \
+          python client.py --continuous
         env:
-        # The client finds the server using the correct internal Kubernetes DNS name
         - name: SERVICE_ENDPOINT
-          value: "http://image-processor-svc:8080"
-        - name: SERVICE_NAME
-          value: "api-client"
-        - name: OTEL_EXPORTER_OTLP_ENDPOINT
-          value: "http://otel-collector.observability.svc.cluster.local:4318"
+          # This should point to the correct service name for the naive server
+          value: "http://image-processor-naive-svc:8080"

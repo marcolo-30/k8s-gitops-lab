@@ -1,24 +1,24 @@
-# dev/deployment.yaml - SERVER ONLY
+# dev/deployment.yaml - Naive Server Deployment
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: image-processor
+  name: image-processor-naive
   namespace: myapp
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: image-processor
+      app: image-processor-naive
   template:
     metadata:
       labels:
-        app: image-processor
+        app: image-processor-naive
     spec:
       nodeSelector:
         kubernetes.io/hostname: r3-node
       containers:
       - name: image-processor-container
-        image: ghcr.io/marcolo-30/k8s-gitops-lab:7ed872e89b4be4a642afd5d48672bc227f6f2872
+        image: ghcr.io/marcolo-30/k8s-gitops-lab:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
@@ -29,19 +29,15 @@ spec:
             port: 8080
           initialDelaySeconds: 5
           periodSeconds: 5
-          failureThreshold: 3
         env:
         - name: SERVICE_NAME
-          value: "image-processor"
+          value: "image-processor-naive"
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
           value: "http://otel-collector.observability.svc.cluster.local:4318"
-        - name: WORKLOAD_SIZE
-          value: "2000000"
-        - name: LATENCY_HEALTHY_SECONDS
-          value: "4.0"
-        - name: LATENCY_CRITICAL_SECONDS
-          value: "10.0"
+        # The new server uses this for its latency score calculation
+        - name: QOS_LATENCY_BASELINE
+          value: "0.5"
         resources:
           requests:
-            cpu: "100m"
-            memory: "64Mi"
+            cpu: "200m"
+            memory: "256Mi"
