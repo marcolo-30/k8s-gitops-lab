@@ -1,6 +1,10 @@
-flask
-pillow
-psutil
+# Server dependencies
+fastapi
+uvicorn[standard] # [standard] includes performance extras
+Pillow
 opentelemetry-sdk
+opentelemetry-api
 opentelemetry-exporter-otlp-proto-http
+
+# Client dependencies
 requests
