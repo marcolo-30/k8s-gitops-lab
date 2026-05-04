@@ -129,6 +129,7 @@ async def process(payload: ProcessRequest, request: Request):
         _qos_append("error", retries=client_attempt)
         raise HTTPException(status_code=500, detail="Image processing failed")
 
+
 # --- Entry Point ---
 if __name__ == "__main__":
     log.info(f"Starting NAIVE image-processor server on {HOST}:{PORT}")

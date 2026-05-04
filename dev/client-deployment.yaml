@@ -5,7 +5,7 @@ metadata:
   name: api-client
   namespace: myapp
 spec:
-  replicas: 1
+  replicas: 0
   selector:
     matchLabels:
       app: api-client

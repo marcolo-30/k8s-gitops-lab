@@ -5,6 +5,4 @@ Pillow
 opentelemetry-sdk
 opentelemetry-api
 opentelemetry-exporter-otlp-proto-http
-
-# Client dependencies
 requests
