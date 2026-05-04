@@ -18,7 +18,7 @@ spec:
         kubernetes.io/hostname: r3-node
       containers:
       - name: image-processor-container
-        image: ghcr.io/marcolo-30/k8s-gitops-lab:ba7749d41a0a1060f1a86689bd452d447d5d874a
+        image: ghcr.io/marcolo-30/k8s-gitops-lab:796302901b0e0856a6e14483b09036212e8ee0c4
         imagePullPolicy: Always
         command: ["/bin/sh", "-c"]
         args:

@@ -18,7 +18,7 @@ spec:
         kubernetes.io/hostname: r3-node
       containers:
       - name: client-container
-        image: ghcr.io/marcolo-30/k8s-gitops-lab:latest
+        image: ghcr.io/marcolo-30/k8s-gitops-lab:796302901b0e0856a6e14483b09036212e8ee0c4
         imagePullPolicy: Always
         # --- CORRECTED COMMAND ---
         # Add the --continuous flag to run in a loop.
