@@ -1,4 +1,4 @@
-# dev/client-deployment.yaml - CLIENT ONLY
+# dev/client-deployment.yaml - Client Deployment
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -20,17 +20,32 @@ spec:
       - name: client-container
         image: ghcr.io/marcolo-30/k8s-gitops-lab:d459b39d1718d2e46eafc9b21b2895d166a99132
         imagePullPolicy: Always
-        # --- CORRECTED COMMAND ---
-        # Add the --continuous flag to run in a loop.
-        command: ["/bin/sh", "-c"]
-        args:
-        - |
-          pip install Pillow requests && \
-          python client.py --continuous
+        # The image already has client.py and all Python deps installed via the
+        # Dockerfile; no need to pip install at runtime.
+        command: ["python", "client.py", "--continuous"]
         env:
         - name: SERVICE_ENDPOINT
-          # This should point to the correct service name for the naive server
           value: "http://image-processor-naive-svc:8080"
-        # CORRECTED: Updated OTEL_EXPORTER_OTLP_ENDPOINT to the new IP address
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
-          value: "http://192.168.0.42:4318"
+          value: "http://otel-collector.observability:4318"
+        - name: SERVICE_NAME
+          value: "image-processor-client"
+        - name: REQUEST_INTERVAL
+          value: "2.0"
+        - name: REQUEST_TIMEOUT
+          value: "60.0"
+        - name: MAX_RETRIES
+          value: "5"
+        - name: MAX_RETRY_DELAY
+          value: "30.0"
+        - name: IMAGE_WIDTH
+          value: "800"
+        - name: IMAGE_HEIGHT
+          value: "600"
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
