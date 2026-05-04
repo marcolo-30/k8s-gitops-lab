@@ -45,9 +45,13 @@ SERVICE_NAME      = os.getenv("SERVICE_NAME",      "image-processor-client")
 REQUEST_TIMEOUT   = float(os.getenv("REQUEST_TIMEOUT",   "60.0"))
 MAX_RETRY_DELAY   = float(os.getenv("MAX_RETRY_DELAY",   "30.0"))
 MAX_RETRIES       = int(os.getenv("MAX_RETRIES",         "5"))
-REQUEST_INTERVAL  = float(os.getenv("REQUEST_INTERVAL",  "2.0"))
-IMAGE_WIDTH       = int(os.getenv("IMAGE_WIDTH",         "800"))
-IMAGE_HEIGHT      = int(os.getenv("IMAGE_HEIGHT",        "600"))
+REQUEST_INTERVAL   = float(os.getenv("REQUEST_INTERVAL",   "2.0"))
+IMAGE_WIDTH        = int(os.getenv("IMAGE_WIDTH",          "1920"))
+IMAGE_HEIGHT       = int(os.getenv("IMAGE_HEIGHT",         "1080"))
+# Cuántas veces repetir el bloque de operaciones pesadas (blur+sharpen)
+# a resolución completa antes del resize. Más = más CPU en el servidor.
+# 1 ≈ baseline, 3 ≈ ~25% CPU, 5 ≈ ~40% CPU (depende del hardware)
+PIPELINE_REPEATS   = int(os.getenv("PIPELINE_REPEATS",    "3"))
 EXPORT_INTERVAL_MS = int(os.getenv("OTEL_EXPORT_INTERVAL_MS", "5000"))
 
 logging.basicConfig(
@@ -145,15 +149,28 @@ def _build_payload() -> dict:
     image_bytes = _generate_image()
     if _otel_ok and bytes_hist is not None:
         bytes_hist.record(len(image_bytes), {"service": SERVICE_NAME})
+
+    # Bloque pesado repetido PIPELINE_REPEATS veces sobre la imagen a resolución
+    # completa (1920×1080). Cada pasada aplica blur grande + sharpen intenso.
+    # Esto es lo que genera la carga CPU real en el servidor.
+    heavy_pass = [
+        {"name": "blur",     "radius": 5.0},   # GaussianBlur O(r²) sobre 2M píxeles
+        {"name": "sharpen",  "factor": 3.5},   # Unsharp equivalente
+        {"name": "contrast", "factor": 1.3},
+    ]
+    operations = heavy_pass * PIPELINE_REPEATS
+    # Al final: grayscale + resize (reduce la imagen) + compresión
+    operations += [
+        {"name": "grayscale"},
+        {"name": "resize",   "width": 1280, "height": 720},
+        {"name": "sharpen",  "factor": 2.0},
+        {"name": "compress", "quality": 75},
+    ]
+
     return {
         "token": f"client-{int(time.time() * 1000)}",
         "image_base64": base64.b64encode(image_bytes).decode("ascii"),
-        "operations": [
-            {"name": "blur",       "radius": 2.0},
-            {"name": "grayscale"},
-            {"name": "resize",     "width": 640, "height": 480},
-            {"name": "compress",   "quality": 80},
-        ],
+        "operations": operations,
     }
 
 

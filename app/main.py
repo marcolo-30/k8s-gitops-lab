@@ -178,6 +178,13 @@ def _apply_ops(img: Image.Image, ops: list) -> Image.Image:
             img = ImageOps.grayscale(img).convert("RGB")
         elif name == "sharpen":
             img = ImageEnhance.Sharpness(img).enhance(float(op.get("factor", 2.0)))
+        elif name == "unsharp_mask":
+            # Más pesado que blur+sharpen por separado: convolución doble interna
+            img = img.filter(ImageFilter.UnsharpMask(
+                radius=float(op.get("radius", 3.0)),
+                percent=int(op.get("percent", 180)),
+                threshold=int(op.get("threshold", 2)),
+            ))
         elif name == "resize":
             img = img.resize((int(op.get("width", 800)), int(op.get("height", 600))),
                              Image.LANCZOS)
@@ -222,6 +229,8 @@ class ImageOperation(BaseModel):
     quality:   Optional[int]   = None
     angle:     Optional[float] = None
     direction: Optional[str]   = None
+    percent:   Optional[int]   = None   # para unsharp_mask
+    threshold: Optional[int]   = None   # para unsharp_mask
 
 class ProcessRequest(BaseModel):
     token:        Optional[str]        = None

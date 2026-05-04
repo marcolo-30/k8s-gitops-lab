@@ -39,13 +39,17 @@ spec:
         - name: MAX_RETRY_DELAY
           value: "30.0"
         - name: IMAGE_WIDTH
-          value: "800"
+          value: "1920"
         - name: IMAGE_HEIGHT
-          value: "600"
+          value: "1080"
+        # Repeticiones del bloque pesado (blur+sharpen+contrast) a resolución completa.
+        # 3 ≈ 25% CPU en el servidor, sube/baja para calibrar.
+        - name: PIPELINE_REPEATS
+          value: "3"
         resources:
           requests:
             cpu: "50m"
-            memory: "128Mi"
+            memory: "256Mi"
           limits:
             cpu: "500m"
-            memory: "256Mi"
+            memory: "512Mi"
