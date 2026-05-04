@@ -1,11 +1,11 @@
-# dev/deployment.yaml - Naive Server Deployment
+# dev/deployment.yaml - Image Processor Server Deployment
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: image-processor-naive
   namespace: myapp
 spec:
-  replicas: 0
+  replicas: 1
   selector:
     matchLabels:
       app: image-processor-naive
@@ -20,6 +20,13 @@ spec:
       - name: image-processor-container
         image: ghcr.io/marcolo-30/k8s-gitops-lab:ba7749d41a0a1060f1a86689bd452d447d5d874a
         imagePullPolicy: Always
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          pip install fastapi "uvicorn[standard]" Pillow psutil \
+                      opentelemetry-sdk opentelemetry-api \
+                      opentelemetry-exporter-otlp-proto-http pydantic --quiet && \
+          python main.py
         ports:
         - containerPort: 8080
           name: http-api
@@ -27,18 +34,23 @@ spec:
           httpGet:
             path: /health
             port: 8080
-          initialDelaySeconds: 5
+          initialDelaySeconds: 15
           periodSeconds: 5
         env:
         - name: SERVICE_NAME
           value: "image-processor-naive"
-        # CORRECTED: Updated OTEL_EXPORTER_OTLP_ENDPOINT to the new IP address
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
           value: "http://192.168.0.42:4318"
-        # The new server uses this for its latency score calculation
+        # ── QoS tuning ────────────────────────────────────────────────────────
+        # Set this to your measured idle processing time (curl /health when no load).
+        # If baseline=0.5s and under load it takes 2s → latency_score = 0.25
         - name: QOS_LATENCY_BASELINE
           value: "0.5"
+        # Sliding window for rate-based metrics (rejection, retry)
+        - name: QOS_WINDOW_SECONDS
+          value: "60"
         resources:
           requests:
             cpu: "200m"
             memory: "256Mi"
+          # No CPU limit — so the burner can actually starve it

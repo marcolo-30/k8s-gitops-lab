@@ -5,7 +5,7 @@ metadata:
   name: api-client
   namespace: myapp
 spec:
-  replicas: 0
+  replicas: 1
   selector:
     matchLabels:
       app: api-client
@@ -18,7 +18,7 @@ spec:
         kubernetes.io/hostname: r3-node
       containers:
       - name: client-container
-        image: ghcr.io/marcolo-30/k8s-gitops-lab:ba7749d41a0a1060f1a86689bd452d447d5d874a
+        image: ghcr.io/marcolo-30/k8s-gitops-lab:latest
         imagePullPolicy: Always
         # --- CORRECTED COMMAND ---
         # Add the --continuous flag to run in a loop.
@@ -31,3 +31,6 @@ spec:
         - name: SERVICE_ENDPOINT
           # This should point to the correct service name for the naive server
           value: "http://image-processor-naive-svc:8080"
+        # CORRECTED: Updated OTEL_EXPORTER_OTLP_ENDPOINT to the new IP address
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://192.168.0.42:4318"
