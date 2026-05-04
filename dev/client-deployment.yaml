@@ -18,7 +18,7 @@ spec:
         kubernetes.io/hostname: r3-node
       containers:
       - name: client-container
-        image: ghcr.io/marcolo-30/k8s-gitops-lab:d459b39d1718d2e46eafc9b21b2895d166a99132
+        image: ghcr.io/marcolo-30/k8s-gitops-lab:15838b4b2732e3ca249c6af97c055cfb110e3c54
         imagePullPolicy: Always
         # The image already has client.py and all Python deps installed via the
         # Dockerfile; no need to pip install at runtime.
