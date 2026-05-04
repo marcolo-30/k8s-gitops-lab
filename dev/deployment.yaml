@@ -32,8 +32,9 @@ spec:
         env:
         - name: SERVICE_NAME
           value: "image-processor-naive"
+        # CORRECTED: Updated OTEL_EXPORTER_OTLP_ENDPOINT to the new IP address
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
-          value: "http://otel-collector.observability.svc.cluster.local:4318"
+          value: "http://192.168.0.42:4318"
         # The new server uses this for its latency score calculation
         - name: QOS_LATENCY_BASELINE
           value: "0.5"
