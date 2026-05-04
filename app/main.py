@@ -291,6 +291,7 @@ async def process(payload: ProcessRequest, request: Request):
     }
     return Response(content=output_bytes, media_type="image/jpeg", headers=headers)
 
+
 if __name__ == "__main__":
     log.info(f"Starting image-processor on {HOST}:{PORT}")
     log.info(f"  QoS latency baseline : {QOS_LATENCY_BASELINE}s")

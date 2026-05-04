@@ -18,15 +18,45 @@ spec:
         kubernetes.io/hostname: r3-node
       containers:
       - name: image-processor-container
-        image: ghcr.io/marcolo-30/k8s-gitops-lab:796302901b0e0856a6e14483b09036212e8ee0c4
+        image: ghcr.io/marcolo-30/k8s-gitops-lab:f7750bbcf722957d89becd199434536dde0a8204
         imagePullPolicy: Always
         command: ["/bin/sh", "-c"]
         args:
         - |
+          set -e
+          LOG=/tmp/startup.log
+
+          log() { echo "[$(date '+%H:%M:%S')] $*" | tee -a $LOG; }
+
+          log "=========================================="
+          log "STARTUP: container is alive"
+          log "Node    : $(hostname)"
+          log "Python  : $(python --version 2>&1)"
+          log "Working : $(pwd)"
+          log "Files   : $(ls *.py 2>/dev/null | tr '\n' ' ')"
+          log "=========================================="
+
+          log "STEP 1/3 — installing Python dependencies..."
           pip install fastapi "uvicorn[standard]" Pillow psutil \
-                      opentelemetry-sdk opentelemetry-api \
-                      opentelemetry-exporter-otlp-proto-http pydantic --quiet && \
-          python main.py
+            opentelemetry-sdk opentelemetry-api \
+            opentelemetry-exporter-otlp-proto-http pydantic \
+            2>&1 | tee -a $LOG
+          log "STEP 1/3 — pip install EXIT CODE: $?"
+
+          log "STEP 2/3 — verifying imports..."
+          python -c "
+          import fastapi, uvicorn, PIL, psutil
+          from opentelemetry import metrics
+          print('  fastapi      OK')
+          print('  uvicorn      OK')
+          print('  Pillow       OK  version=' + PIL.__version__)
+          print('  psutil       OK  cpu_count=' + str(psutil.cpu_count()))
+          print('  opentelemetry OK')
+          " 2>&1 | tee -a $LOG
+          log "STEP 2/3 — import check EXIT CODE: $?"
+
+          log "STEP 3/3 — launching main.py on port 8080..."
+          exec python main.py 2>&1 | tee -a $LOG
         ports:
         - containerPort: 8080
           name: http-api
@@ -40,7 +70,7 @@ spec:
         - name: SERVICE_NAME
           value: "image-processor-naive"
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
-          value: "http://192.168.0.42:4318"
+          value: "http://otel-collector.observability:4318"
         # ── QoS tuning ────────────────────────────────────────────────────────
         # Set this to your measured idle processing time (curl /health when no load).
         # If baseline=0.5s and under load it takes 2s → latency_score = 0.25
